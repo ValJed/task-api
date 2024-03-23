@@ -3,7 +3,9 @@ use dotenv::dotenv;
 use sqlx::{pool::PoolOptions, postgres::PgPoolOptions, Pool, Postgres};
 
 mod services;
-use services::{create_article, delete_article, fetch_articles, update_article};
+
+use services::context::get_scope as context_scope;
+use services::task::get_scope as task_scope;
 
 pub struct AppState {
     db: Pool<Postgres>,
@@ -17,14 +19,16 @@ async fn main() -> std::io::Result<()> {
     run_migration(&pool).await;
 
     HttpServer::new(move || {
+        let context = context_scope();
+        let task = task_scope();
+
+        println!("Starting server at http://");
         App::new()
             .app_data(web::Data::new(AppState { db: pool.clone() }))
-            .service(create_article)
-            .service(update_article)
-            .service(delete_article)
-            .service(fetch_articles)
+            .service(context)
+            .service(task)
     })
-    .bind(("127.0.0.1", 8080))?
+    .bind(("127.0.0.1", 3000))?
     .run()
     .await
 }
