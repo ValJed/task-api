@@ -1,15 +1,5 @@
 use actix_web::{delete, get, post, put, web, HttpResponse, Responder, Scope};
-use serde::{Deserialize, Serialize};
 use sqlx;
-
-#[derive(Serialize, Deserialize)]
-struct Task {
-    id: usize,
-    name: String,
-    done: bool,
-    creation_date: String,
-    modification_date: String,
-}
 
 pub fn get_scope() -> Scope {
     web::scope("/task")

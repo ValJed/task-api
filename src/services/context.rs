@@ -1,43 +1,30 @@
 use actix_web::{delete, get, post, put, web, HttpRequest, HttpResponse, Responder, Scope};
-use serde::{Deserialize, Serialize};
 use sqlx;
 
-#[derive(Serialize, Deserialize)]
-struct Context {
-    pub id: i32,
-    pub title: String,
-    pub description: String,
-    pub content: String,
-}
-
 pub fn get_scope() -> Scope {
-    print!("set scope context");
     web::scope("/context")
         .service(fetch_all)
-        // .service(fetch_one)
         .service(fetch_or_create)
         .service(update)
         .service(delete)
 }
 
-#[get("/")]
-pub async fn fetch_all() -> impl Responder {
-    println!("fetch_all");
-    HttpResponse::Ok().body("fetch articles")
+#[get("")]
+pub async fn fetch_all(req: HttpRequest) -> impl Responder {
+    HttpResponse::Ok().body("fetch contexts")
 }
 
-#[post("/")]
+#[post("")]
 pub async fn fetch_or_create(req: HttpRequest) -> impl Responder {
-    println!("req: {:?}", req);
-    HttpResponse::Ok().body("create article")
+    HttpResponse::Ok().body("create context")
 }
 
 #[put("/{id}")]
 pub async fn update() -> impl Responder {
-    HttpResponse::Ok().body("update article")
+    HttpResponse::Ok().body("update context")
 }
 
 #[delete("/")]
 pub async fn delete() -> impl Responder {
-    HttpResponse::Ok().body("delete article")
+    HttpResponse::Ok().body("delete context")
 }
