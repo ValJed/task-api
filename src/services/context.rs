@@ -1,3 +1,4 @@
+#[path = "../structs.rs"]
 mod structs;
 
 use actix_web::{delete, get, post, put, web, HttpRequest, HttpResponse, Responder, Scope};
