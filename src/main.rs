@@ -7,10 +7,10 @@ mod structs;
 
 use services::context::get_scope as context_scope;
 use services::task::get_scope as task_scope;
-use structs::AppState;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    env_logger::init();
     dotenv().ok();
     let pool = db::connect_db().await;
 
@@ -19,9 +19,10 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         let context = context_scope();
         let task = task_scope();
+        // let data = AppState { db: pool.clone() };
 
         App::new()
-            .app_data(web::Data::new(AppState { db: pool.clone() }))
+            .app_data(web::Data::new(pool.clone()))
             .service(context)
             .service(task)
     })

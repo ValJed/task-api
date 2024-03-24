@@ -1,5 +1,5 @@
 [package]
-name = "rust-api"
+name = "task-api"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,7 +7,9 @@ edition = "2021"
 
 [dependencies]
 actix-web = "4.4.0"
+derive_more = "0.99.17"
 dotenv = "0.15.0"
+env_logger = "0.11.3"
 serde = { version = "1.0.192", features = ["derive"] }
 sqlx = { version = "0.7.2", features = ["postgres", "runtime-async-std-native-tls"] }
 tokio = "1.33.0"
