@@ -1,7 +1,10 @@
 CREATE TABLE IF NOT EXISTS task (
     id SERIAL PRIMARY KEY,
     content VARCHAR(1000) NOT NULL,
-    context_id INT NOT NULL
+    context_id INT NOT NULL,
+    done: BOOLEAN NOT NULL DEFAULT FALSE,
+    creation_date: DATE NOT NULL DEFAULT CURRENT_DATE,
+    modification_date: DATE NOT NULL DEFAULT CURRENT_DATE,
 );
 
 CREATE TABLE IF NOT EXISTS context (
