@@ -12,6 +12,11 @@ pub struct Context {
     pub name: String,
 }
 
+#[derive(Deserialize, Debug, Clone)]
+pub struct ContextRequest {
+    pub name: String,
+}
+
 #[derive(Serialize, Deserialize, FromRow, Debug)]
 pub struct Task {
     id: i32,
@@ -22,6 +27,6 @@ pub struct Task {
 }
 
 #[derive(Deserialize, Debug, Clone)]
-pub struct ContextRequest {
+pub struct TaskRequest {
     pub name: String,
 }
