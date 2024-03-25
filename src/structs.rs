@@ -14,7 +14,7 @@ pub struct Context {
 
 #[derive(Serialize, Deserialize, FromRow, Debug)]
 pub struct Task {
-    id: usize,
+    id: i32,
     name: String,
     done: bool,
     creation_date: String,
