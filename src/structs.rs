@@ -1,3 +1,4 @@
+use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Pool, Postgres};
 
@@ -20,13 +21,14 @@ pub struct ContextRequest {
 #[derive(Serialize, Deserialize, FromRow, Debug)]
 pub struct Task {
     id: i32,
-    name: String,
+    content: String,
     done: bool,
-    creation_date: String,
-    modification_date: String,
+    creation_date: NaiveDateTime,
+    modification_date: NaiveDateTime,
 }
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct TaskRequest {
-    pub name: String,
+    pub content: String,
+    pub context_id: i32,
 }

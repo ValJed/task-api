@@ -14,23 +14,13 @@ pub fn get_scope() -> Scope {
         .service(delete)
 }
 
-// #[get("")]
-// pub async fn fetch_all(pool: web::Data<Pool<Postgres>>) -> impl Responder {
-//     let tasks: Result<Vec<Task>, sqlx::Error> = sqlx::query_as("SELECT * FROM task")
-//         .fetch_all(pool.get_ref())
-//         .await;
-//
-//     match tasks {
-//         Ok(tasks) => HttpResponse::Ok().json(tasks),
-//         Err(_) => HttpResponse::InternalServerError().body("Internal Server Error"),
-//     }
-// }
-
 #[get("")]
 pub async fn fetch_all(pool: web::Data<Pool<Postgres>>) -> impl Responder {
     let tasks_res: Result<Vec<Task>, sqlx::Error> = sqlx::query_as("SELECT * FROM task")
         .fetch_all(pool.get_ref())
         .await;
+
+    println!("tasks_res: {:?}", tasks_res);
 
     match tasks_res {
         Ok(tasks) => HttpResponse::Ok().json(tasks),
@@ -55,24 +45,28 @@ pub async fn fetch_one(pool: web::Data<Pool<Postgres>>, id: web::Path<i32>) -> i
     }
 }
 
-#[post("/")]
+#[post("")]
 pub async fn create(
     pool: web::Data<Pool<Postgres>>,
     data: web::Json<TaskRequest>,
 ) -> impl Responder {
-    if data.name.is_empty() {
+    if data.content.is_empty() {
         return HttpResponse::BadRequest().body("Name is required");
     }
+    println!("data.content: {:?}", data.content);
+    println!("data.context_id: {:?}", data.context_id);
 
     let task_res: Result<Task, sqlx::Error> =
-        sqlx::query_as("INSERT INTO task (name) VALUES ($1) RETURNING *")
-            .bind(data.name.clone())
+        sqlx::query_as("INSERT INTO task (content, context_id) VALUES ($1, $2) RETURNING *")
+            .bind(data.content.clone())
+            .bind(data.context_id.clone())
             .fetch_one(pool.get_ref())
             .await;
 
     match task_res {
         Ok(task) => return HttpResponse::Ok().json(task),
-        Err(_) => {
+        Err(err) => {
+            println!("err: {:?}", err);
             return HttpResponse::InternalServerError().body("Internal Server Error");
         }
     }
