@@ -11,6 +11,7 @@ pub struct AppState {
 pub struct Context {
     pub id: i32,
     pub name: String,
+    pub active: bool,
 }
 
 #[derive(Deserialize, Debug, Clone)]

@@ -8,7 +8,7 @@ use structs::{Context, ContextRequest};
 pub fn get_scope() -> Scope {
     web::scope("/context")
         .service(fetch_all)
-        .service(fetch_or_create)
+        .service(use_or_create)
         .service(delete)
     // .service(update)
 }
@@ -26,7 +26,7 @@ pub async fn fetch_all(pool: web::Data<Pool<Postgres>>) -> impl Responder {
 }
 
 #[post("")]
-pub async fn fetch_or_create(
+pub async fn use_or_create(
     pool: web::Data<Pool<Postgres>>,
     data: web::Json<ContextRequest>,
 ) -> impl Responder {
@@ -34,8 +34,15 @@ pub async fn fetch_or_create(
         return HttpResponse::BadRequest().body("Name is required");
     };
 
+    let update_req = r#"
+        UPDATE context
+        SET active = true
+        WHERE name = $1
+        RETURNING *"#;
+
     let existing: Result<Option<Context>, sqlx::Error> =
-        sqlx::query_as("SELECT * FROM context WHERE name = $1")
+        // sqlx::query_as("SELECT * FROM context WHERE name = $1")
+        sqlx::query_as(update_req)
             .bind(data.name.clone())
             .fetch_optional(pool.get_ref())
             .await;
@@ -44,6 +51,12 @@ pub async fn fetch_or_create(
         return HttpResponse::InternalServerError().body("Internal Server Error");
     }
 
+    let _unset_active =
+        sqlx::query("UPDATE context SET active = false WHERE active = true AND name != $1")
+            .bind(data.name.clone())
+            .execute(pool.get_ref())
+            .await;
+
     let ctx = existing.unwrap();
 
     if ctx.is_some() {
@@ -51,8 +64,9 @@ pub async fn fetch_or_create(
     }
 
     let context: Result<Context, sqlx::Error> =
-        sqlx::query_as("INSERT INTO context (name) VALUES ($1) RETURNING *")
+        sqlx::query_as("INSERT INTO context (name, active) VALUES ($1, $2) RETURNING *")
             .bind(data.name.clone())
+            .bind(true)
             .fetch_one(pool.get_ref())
             .await;
 
