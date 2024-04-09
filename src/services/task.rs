@@ -3,11 +3,11 @@ mod structs;
 
 use actix_web::{delete, get, post, put, web, HttpResponse, Responder, Scope};
 use sqlx::{Pool, Postgres};
-use structs::{Task, TaskRequest};
+use structs::{Task, TaskGetRequest, TaskGetResponse, TaskRequest};
 
 pub fn get_scope() -> Scope {
     web::scope("/task")
-        .service(fetch_all)
+        .service(fetch)
         .service(fetch_one)
         .service(create)
         .service(update)
@@ -15,15 +15,43 @@ pub fn get_scope() -> Scope {
 }
 
 #[get("")]
-pub async fn fetch_all(pool: web::Data<Pool<Postgres>>) -> impl Responder {
-    let tasks_res: Result<Vec<Task>, sqlx::Error> = sqlx::query_as("SELECT * FROM task")
-        .fetch_all(pool.get_ref())
-        .await;
+pub async fn fetch(
+    pool: web::Data<Pool<Postgres>>,
+    query: web::Query<TaskGetRequest>,
+) -> impl Responder {
+    let active = query.active.unwrap_or(false);
 
-    println!("tasks_res: {:?}", tasks_res);
+    let partial_req = match active {
+        true => "WHERE context.active = true",
+        false => "",
+    };
+    let request = format!(
+        r#"
+        SELECT 
+          context.id,
+          context.name,
+          json_agg(json_build_object('id', task.id, 'content', task.content, 'done', task.done)) AS tasks
+        FROM context
+        INNER JOIN task
+        ON task.context_id = context.id
+        {}
+        GROUP BY context.id;
+        "#,
+        partial_req
+    );
+
+    let tasks_res: Result<Vec<TaskGetResponse>, sqlx::Error> =
+        sqlx::query_as(&request).fetch_all(pool.get_ref()).await;
 
     match tasks_res {
-        Ok(tasks) => HttpResponse::Ok().json(tasks),
+        Ok(tasks) => {
+            // TODO: Test response when no active context
+            if active && tasks.len() == 1 {
+                return HttpResponse::Ok().json(&tasks[0]);
+            } else {
+                return HttpResponse::Ok().json(tasks);
+            }
+        }
         Err(_) => HttpResponse::InternalServerError().body("Internal Server Error"),
     }
 }
