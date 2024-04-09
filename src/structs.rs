@@ -32,7 +32,7 @@ pub struct Task {
 #[derive(Deserialize, Debug, Clone)]
 pub struct TaskRequest {
     pub content: String,
-    pub context_id: i32,
+    pub context_id: Option<i32>,
 }
 
 #[derive(Deserialize, Debug)]

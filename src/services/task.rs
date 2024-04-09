@@ -3,7 +3,7 @@ mod structs;
 
 use actix_web::{delete, get, post, put, web, HttpResponse, Responder, Scope};
 use sqlx::{Pool, Postgres};
-use structs::{Task, TaskGetRequest, TaskGetResponse, TaskRequest};
+use structs::{Context, Task, TaskGetRequest, TaskGetResponse, TaskRequest};
 
 pub fn get_scope() -> Scope {
     web::scope("/task")
@@ -81,13 +81,35 @@ pub async fn create(
     if data.content.is_empty() {
         return HttpResponse::BadRequest().body("Name is required");
     }
-    println!("data.content: {:?}", data.content);
-    println!("data.context_id: {:?}", data.context_id);
+
+    let context_id: i32;
+
+    if data.context_id.is_some() {
+        context_id = data.context_id.unwrap();
+    } else {
+        let active_context: Result<Option<Context>, sqlx::Error> =
+            sqlx::query_as("SELECT * from context WHERE context.active = true")
+                .fetch_optional(pool.get_ref())
+                .await;
+
+        if active_context.is_err() {
+            return HttpResponse::InternalServerError().body("Internal Server Error");
+        }
+
+        let active = active_context.unwrap();
+
+        if active.is_none() {
+            return HttpResponse::BadRequest().body("A context must exist before to create a task");
+        }
+
+        println!("active: {:?}", active);
+        context_id = active.unwrap().id;
+    }
 
     let task_res: Result<Task, sqlx::Error> =
         sqlx::query_as("INSERT INTO task (content, context_id) VALUES ($1, $2) RETURNING *")
             .bind(data.content.clone())
-            .bind(data.context_id.clone())
+            .bind(context_id)
             .fetch_one(pool.get_ref())
             .await;
 
