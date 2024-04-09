@@ -127,7 +127,25 @@ pub async fn update(pool: web::Data<Pool<Postgres>>) -> impl Responder {
     HttpResponse::Ok().body("update article")
 }
 
-#[delete("/")]
-pub async fn delete(pool: web::Data<Pool<Postgres>>) -> impl Responder {
-    HttpResponse::Ok().body("delete article")
+#[delete("/{id}")]
+pub async fn delete(pool: web::Data<Pool<Postgres>>, id: web::Path<i32>) -> impl Responder {
+    let deleted: Result<Task, sqlx::Error> =
+        sqlx::query_as("DELETE from task WHERE id = $1 RETURNING *")
+            .bind(*id)
+            .fetch_one(pool.get_ref())
+            .await;
+
+    if deleted.is_err() {
+        match deleted.unwrap_err() {
+            sqlx::Error::RowNotFound => {
+                return HttpResponse::NotFound().body("Task not found");
+            }
+            _ => {
+                return HttpResponse::InternalServerError().body("Internal Server Error");
+            }
+        };
+    }
+    let task = deleted.unwrap();
+
+    HttpResponse::Ok().json(task)
 }
