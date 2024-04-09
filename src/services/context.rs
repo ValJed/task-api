@@ -79,6 +79,15 @@ pub async fn use_or_create(
 
 #[delete("/{id}")]
 pub async fn delete(pool: web::Data<Pool<Postgres>>, id: web::Path<i32>) -> impl Responder {
+    let deleted_tasks = sqlx::query("DELETE FROM task WHERE context_id = $1")
+        .bind(*id)
+        .execute(pool.get_ref())
+        .await;
+
+    if deleted_tasks.is_err() {
+        return HttpResponse::InternalServerError().body("Internal Server Error");
+    }
+
     let deleted: Result<Context, sqlx::Error> =
         sqlx::query_as("DELETE FROM context WHERE id = $1 RETURNING * ")
             .bind(*id)
@@ -89,11 +98,14 @@ pub async fn delete(pool: web::Data<Pool<Postgres>>, id: web::Path<i32>) -> impl
         Ok(ctx) => {
             return HttpResponse::Ok().json(ctx);
         }
-        Err(err) => {
-            // TODO: Handle multiple error types
-            println!("err: {:?}", err);
-            return HttpResponse::NotFound().body("Not Found");
-        }
+        Err(err) => match err {
+            sqlx::Error::RowNotFound => {
+                return HttpResponse::NotFound().body("Context not found");
+            }
+            _ => {
+                return HttpResponse::InternalServerError().body("Internal Server Error");
+            }
+        },
     }
 }
 

@@ -135,17 +135,17 @@ pub async fn delete(pool: web::Data<Pool<Postgres>>, id: web::Path<i32>) -> impl
             .fetch_one(pool.get_ref())
             .await;
 
-    if deleted.is_err() {
-        match deleted.unwrap_err() {
+    match deleted {
+        Ok(ctx) => {
+            return HttpResponse::Ok().json(ctx);
+        }
+        Err(err) => match err {
             sqlx::Error::RowNotFound => {
-                return HttpResponse::NotFound().body("Task not found");
+                return HttpResponse::NotFound().body("Context not found");
             }
             _ => {
                 return HttpResponse::InternalServerError().body("Internal Server Error");
             }
-        };
+        },
     }
-    let task = deleted.unwrap();
-
-    HttpResponse::Ok().json(task)
 }
