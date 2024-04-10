@@ -1,7 +1,7 @@
 #[path = "../structs.rs"]
 mod structs;
 
-use actix_web::{delete, get, post, web, HttpResponse, Responder, Result, Scope};
+use actix_web::{delete, get, post, put, web, HttpResponse, Responder, Result, Scope};
 use sqlx::{Pool, Postgres};
 use structs::{Context, ContextRequest};
 
@@ -40,12 +40,10 @@ pub async fn use_or_create(
         WHERE name = $1
         RETURNING *"#;
 
-    let existing: Result<Option<Context>, sqlx::Error> =
-        // sqlx::query_as("SELECT * FROM context WHERE name = $1")
-        sqlx::query_as(update_req)
-            .bind(data.name.clone())
-            .fetch_optional(pool.get_ref())
-            .await;
+    let existing: Result<Option<Context>, sqlx::Error> = sqlx::query_as(update_req)
+        .bind(data.name.clone())
+        .fetch_optional(pool.get_ref())
+        .await;
 
     if existing.is_err() {
         return HttpResponse::InternalServerError().body("Internal Server Error");
@@ -75,6 +73,21 @@ pub async fn use_or_create(
     }
 
     HttpResponse::Ok().json(context.unwrap())
+}
+
+#[post("/clear/{id}")]
+pub async fn clear(pool: web::Data<Pool<Postgres>>, id: web::Path<i32>) -> impl Responder {
+    let deleted_tasks = sqlx::query("DELETE FROM task WHERE context_id = $1")
+        .bind(*id)
+        .execute(pool.get_ref())
+        .await;
+
+    println!("deleted_tasks: {:?}", deleted_tasks);
+    if deleted_tasks.is_err() {
+        return HttpResponse::InternalServerError().body("Internal Server Error");
+    }
+
+    HttpResponse::Ok().body("Context cleared")
 }
 
 #[delete("/{id}")]

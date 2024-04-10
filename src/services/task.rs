@@ -73,6 +73,7 @@ pub async fn fetch_one(pool: web::Data<Pool<Postgres>>, id: web::Path<i32>) -> i
     }
 }
 
+// TODO: Verify context exist when creatint from context ID
 #[post("")]
 pub async fn create(
     pool: web::Data<Pool<Postgres>>,
