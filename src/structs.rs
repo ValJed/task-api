@@ -35,14 +35,22 @@ pub struct TaskRequest {
     pub context_id: Option<i32>,
 }
 
+#[derive(Deserialize, Debug, Clone)]
+pub struct TaskPutRequest {
+    pub content: Option<String>,
+    pub done: Option<bool>,
+}
+
 #[derive(Deserialize, Debug)]
 pub struct TaskGetRequest {
     pub active: Option<bool>,
+    pub context_id: Option<i32>,
 }
 
 #[derive(Serialize, Deserialize, FromRow, Debug)]
-pub struct TaskGetResponse {
+pub struct FullContext {
     pub id: i32,
     pub name: String,
+    pub active: bool,
     pub tasks: Json<Vec<Task>>,
 }

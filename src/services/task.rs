@@ -1,9 +1,11 @@
 #[path = "../structs.rs"]
 mod structs;
 
+use std::clone;
+
 use actix_web::{delete, get, post, put, web, HttpResponse, Responder, Scope};
 use sqlx::{Pool, Postgres};
-use structs::{Context, Task, TaskGetRequest, TaskGetResponse, TaskRequest};
+use structs::{Context, FullContext, Task, TaskGetRequest, TaskPutRequest, TaskRequest};
 
 pub fn get_scope() -> Scope {
     web::scope("/task")
@@ -19,8 +21,21 @@ pub async fn fetch(
     pool: web::Data<Pool<Postgres>>,
     query: web::Query<TaskGetRequest>,
 ) -> impl Responder {
-    let active = query.active.unwrap_or(false);
+    if query.context_id.is_some() {
+        let context_id = query.context_id.unwrap();
+        let tasks_res: Result<Vec<Task>, sqlx::Error> =
+            sqlx::query_as("SELECT * FROM task WHERE context_id = $1 ORDER BY id ASC")
+                .bind(context_id)
+                .fetch_all(pool.get_ref())
+                .await;
 
+        match tasks_res {
+            Ok(tasks) => return HttpResponse::Ok().json(tasks),
+            Err(err) => return handle_err(err),
+        }
+    }
+
+    let active = query.active.unwrap_or(false);
     let partial_req = match active {
         true => "WHERE context.active = true",
         false => "",
@@ -40,7 +55,7 @@ pub async fn fetch(
         partial_req
     );
 
-    let tasks_res: Result<Vec<TaskGetResponse>, sqlx::Error> =
+    let tasks_res: Result<Vec<FullContext>, sqlx::Error> =
         sqlx::query_as(&request).fetch_all(pool.get_ref()).await;
 
     match tasks_res {
@@ -52,28 +67,24 @@ pub async fn fetch(
                 return HttpResponse::Ok().json(tasks);
             }
         }
-        Err(_) => HttpResponse::InternalServerError().body("Internal Server Error"),
+        Err(err) => return handle_err(err),
     }
 }
 
 #[get("/{id}")]
 pub async fn fetch_one(pool: web::Data<Pool<Postgres>>, id: web::Path<i32>) -> impl Responder {
-    let task_res: Result<Task, sqlx::Error> =
-        sqlx::query_as("SELECT * FROM task WHERE id = $1 RETURNING *")
-            .bind(*id)
-            .fetch_one(pool.get_ref())
-            .await;
+    let task_res: Result<Task, sqlx::Error> = sqlx::query_as("SELECT * FROM task WHERE id = $1")
+        .bind(*id)
+        .fetch_one(pool.get_ref())
+        .await;
 
     match task_res {
         Ok(task) => HttpResponse::Ok().json(task),
-        Err(_) => {
-            // TODO: Manager errors (server / not found)
-            return HttpResponse::InternalServerError().body("Internal Server Error");
-        }
+        Err(err) => handle_err(err),
     }
 }
 
-// TODO: Verify context exist when creatint from context ID
+// TODO: Verify context exist when creating from context ID
 #[post("")]
 pub async fn create(
     pool: web::Data<Pool<Postgres>>,
@@ -103,7 +114,6 @@ pub async fn create(
             return HttpResponse::BadRequest().body("A context must exist before to create a task");
         }
 
-        println!("active: {:?}", active);
         context_id = active.unwrap().id;
     }
 
@@ -116,16 +126,55 @@ pub async fn create(
 
     match task_res {
         Ok(task) => return HttpResponse::Ok().json(task),
-        Err(err) => {
-            println!("err: {:?}", err);
-            return HttpResponse::InternalServerError().body("Internal Server Error");
-        }
+        Err(err) => return handle_err(err),
     }
 }
 
-#[put("/")]
-pub async fn update(pool: web::Data<Pool<Postgres>>) -> impl Responder {
-    HttpResponse::Ok().body("update article")
+#[put("/{id}")]
+pub async fn update(
+    pool: web::Data<Pool<Postgres>>,
+    data: web::Json<TaskPutRequest>,
+    id: web::Path<i32>,
+) -> impl Responder {
+    if data.content.is_none() && data.done.is_none() {
+        return HttpResponse::BadRequest().body("Content or done is required");
+    }
+
+    let set_content = if data.content.is_some() {
+        let content = data.content.clone().unwrap();
+        format!("content = {}", content)
+    } else {
+        String::new()
+    };
+    let set_done = if data.done.is_some() {
+        let done = data.done.unwrap();
+        let done_str = if done { "true" } else { "false" };
+        format!("done = {}", done_str)
+    } else {
+        String::new()
+    };
+
+    let request = format!(
+        r#"
+        UPDATE task
+        SET 
+        {}
+        {}
+        WHERE id = $1
+        RETURNING *;
+        "#,
+        set_content, set_done
+    );
+
+    let task_res: Result<Task, sqlx::Error> = sqlx::query_as(&request)
+        .bind(*id)
+        .fetch_one(pool.get_ref())
+        .await;
+
+    match task_res {
+        Ok(task) => return HttpResponse::Ok().json(task),
+        Err(err) => return handle_err(err),
+    }
 }
 
 #[delete("/{id}")]
@@ -137,16 +186,20 @@ pub async fn delete(pool: web::Data<Pool<Postgres>>, id: web::Path<i32>) -> impl
             .await;
 
     match deleted {
-        Ok(ctx) => {
-            return HttpResponse::Ok().json(ctx);
+        Ok(task) => {
+            return HttpResponse::Ok().json(task);
         }
-        Err(err) => match err {
-            sqlx::Error::RowNotFound => {
-                return HttpResponse::NotFound().body("Context not found");
-            }
-            _ => {
-                return HttpResponse::InternalServerError().body("Internal Server Error");
-            }
-        },
+        Err(err) => return handle_err(err),
+    }
+}
+
+fn handle_err(err: sqlx::Error) -> HttpResponse {
+    match err {
+        sqlx::Error::RowNotFound => {
+            return HttpResponse::NotFound().body("Not found");
+        }
+        _ => {
+            return HttpResponse::InternalServerError().body("Internal Server Error");
+        }
     }
 }
