@@ -1,9 +1,13 @@
 #[path = "../structs.rs"]
 mod structs;
 
+#[path = "../utils.rs"]
+mod utils;
+
 use actix_web::{delete, get, post, put, web, HttpResponse, Responder, Result, Scope};
 use sqlx::{Pool, Postgres};
 use structs::{Context, ContextRequest};
+use utils::handle_err;
 
 pub fn get_scope() -> Scope {
     web::scope("/context")
@@ -33,6 +37,20 @@ pub async fn use_or_create(
     if data.name.is_empty() {
         return HttpResponse::BadRequest().body("Name is required");
     };
+
+    if data.simple_create.is_some() && data.simple_create.unwrap() {
+        let context: Result<Context, sqlx::Error> =
+            sqlx::query_as("INSERT INTO context (name) VALUES ($1) RETURNING *")
+                .bind(data.name.clone())
+                .fetch_one(pool.get_ref())
+                .await;
+
+        if context.is_err() {
+            return HttpResponse::InternalServerError().body("Internal Server Error");
+        }
+
+        return HttpResponse::Ok().json(context.unwrap());
+    }
 
     let update_req = r#"
         UPDATE context
@@ -107,8 +125,27 @@ pub async fn delete(pool: web::Data<Pool<Postgres>>, id: web::Path<i32>) -> impl
             .fetch_one(pool.get_ref())
             .await;
 
+    println!("deleted: {:?}", deleted);
+
     match deleted {
         Ok(ctx) => {
+            if ctx.active {
+                let new_active: Result<Context, sqlx::Error> = sqlx::query_as(
+                    "SELECT * FROM context WHERE active = false ORDER BY id LIMIT 1",
+                )
+                .fetch_one(pool.get_ref())
+                .await;
+
+                println!("new_active: {:?}", new_active);
+
+                if new_active.is_ok() {
+                    let _ = sqlx::query("UPDATE context SET active = true WHERE id = $1")
+                        .bind(new_active.unwrap().id)
+                        .execute(pool.get_ref())
+                        .await;
+                }
+            }
+
             return HttpResponse::Ok().json(ctx);
         }
         Err(err) => match err {
@@ -122,8 +159,26 @@ pub async fn delete(pool: web::Data<Pool<Postgres>>, id: web::Path<i32>) -> impl
     }
 }
 
-// Not needed for now
-// #[put("/{id}")]
-// pub async fn update(pool: web::Data<Pool<Postgres>>, req: HttpRequest) -> impl Responder {
-//     HttpResponse::Ok().body("update context")
-// }
+#[post("/{id}")]
+pub async fn update(
+    pool: web::Data<Pool<Postgres>>,
+    data: web::Json<Context>,
+    id: web::Path<i32>,
+) -> impl Responder {
+    println!("data: {:?}", data);
+    println!("id: {:?}", id);
+    let updated: Result<Context, sqlx::Error> =
+        sqlx::query_as("UPDATE context SET name = $1, active = $2 WHERE id = $3 RETURNING *")
+            .bind(data.name.clone())
+            .bind(data.active)
+            .bind(*id)
+            .fetch_one(pool.get_ref())
+            .await;
+
+    println!("updated: {:?}", updated);
+
+    match updated {
+        Ok(ctx) => HttpResponse::Ok().json(ctx),
+        Err(err) => handle_err(err),
+    }
+}

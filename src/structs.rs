@@ -18,6 +18,7 @@ pub struct Context {
 #[derive(Deserialize, Debug, Clone)]
 pub struct ContextRequest {
     pub name: String,
+    pub simple_create: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, FromRow, Debug)]

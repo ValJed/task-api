@@ -1,11 +1,13 @@
 #[path = "../structs.rs"]
 mod structs;
 
-use std::clone;
+#[path = "../utils.rs"]
+mod utils;
 
 use actix_web::{delete, get, post, put, web, HttpResponse, Responder, Scope};
 use sqlx::{Pool, Postgres};
 use structs::{Context, FullContext, Task, TaskGetRequest, TaskPutRequest, TaskRequest};
+use utils::handle_err;
 
 pub fn get_scope() -> Scope {
     web::scope("/task")
@@ -190,16 +192,5 @@ pub async fn delete(pool: web::Data<Pool<Postgres>>, id: web::Path<i32>) -> impl
             return HttpResponse::Ok().json(task);
         }
         Err(err) => return handle_err(err),
-    }
-}
-
-fn handle_err(err: sqlx::Error) -> HttpResponse {
-    match err {
-        sqlx::Error::RowNotFound => {
-            return HttpResponse::NotFound().body("Not found");
-        }
-        _ => {
-            return HttpResponse::InternalServerError().body("Internal Server Error");
-        }
     }
 }
