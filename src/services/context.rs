@@ -14,7 +14,7 @@ pub fn get_scope() -> Scope {
         .service(fetch_all)
         .service(use_or_create)
         .service(delete)
-    // .service(update)
+        .service(update)
 }
 
 #[get("")]
@@ -130,19 +130,10 @@ pub async fn delete(pool: web::Data<Pool<Postgres>>, id: web::Path<i32>) -> impl
     match deleted {
         Ok(ctx) => {
             if ctx.active {
-                let new_active: Result<Context, sqlx::Error> = sqlx::query_as(
-                    "SELECT * FROM context WHERE active = false ORDER BY id LIMIT 1",
-                )
-                .fetch_one(pool.get_ref())
-                .await;
+                let cleaned = clean_active(&pool, ctx.id, ctx.active).await;
 
-                println!("new_active: {:?}", new_active);
-
-                if new_active.is_ok() {
-                    let _ = sqlx::query("UPDATE context SET active = true WHERE id = $1")
-                        .bind(new_active.unwrap().id)
-                        .execute(pool.get_ref())
-                        .await;
+                if cleaned.is_err() {
+                    return HttpResponse::InternalServerError().body("Internal Server Error");
                 }
             }
 
@@ -159,14 +150,32 @@ pub async fn delete(pool: web::Data<Pool<Postgres>>, id: web::Path<i32>) -> impl
     }
 }
 
-#[post("/{id}")]
+#[put("/{id}")]
 pub async fn update(
     pool: web::Data<Pool<Postgres>>,
     data: web::Json<Context>,
     id: web::Path<i32>,
 ) -> impl Responder {
-    println!("data: {:?}", data);
-    println!("id: {:?}", id);
+    let existing: Result<Context, sqlx::Error> =
+        sqlx::query_as("SELECT * FROM context WHERE id = $1")
+            .bind(*id)
+            .fetch_one(pool.get_ref())
+            .await;
+
+    if existing.is_err() {
+        return HttpResponse::NotFound().body("Context not found");
+    }
+
+    let existing_ctx: Context = existing.unwrap();
+
+    if data.active && !existing_ctx.active {
+        let cleaned = clean_active(&pool, existing_ctx.id, true).await;
+
+        if cleaned.is_err() {
+            return HttpResponse::InternalServerError().body("Internal Server Error");
+        }
+    }
+
     let updated: Result<Context, sqlx::Error> =
         sqlx::query_as("UPDATE context SET name = $1, active = $2 WHERE id = $3 RETURNING *")
             .bind(data.name.clone())
@@ -175,10 +184,50 @@ pub async fn update(
             .fetch_one(pool.get_ref())
             .await;
 
-    println!("updated: {:?}", updated);
-
     match updated {
         Ok(ctx) => HttpResponse::Ok().json(ctx),
         Err(err) => handle_err(err),
     }
+}
+
+async fn clean_active(
+    pool: &web::Data<Pool<Postgres>>,
+    id: i32,
+    active: bool,
+) -> Result<(), sqlx::Error> {
+    if active {
+        let res =
+            sqlx::query("UPDATE context SET active = false WHERE active = true AND NOT id = $1")
+                .bind(id)
+                .execute(pool.get_ref())
+                .await;
+
+        if res.is_err() {
+            return Err(res.unwrap_err());
+        }
+
+        return Ok(());
+    }
+
+    let new_active: Result<Context, sqlx::Error> = sqlx::query_as(
+        "SELECT * FROM context WHERE active = false AND NOT id = $1 ORDER BY id LIMIT 1",
+    )
+    .bind(id)
+    .fetch_one(pool.get_ref())
+    .await;
+
+    if new_active.is_err() {
+        return Err(new_active.unwrap_err());
+    }
+
+    let res = sqlx::query("UPDATE context SET active = true WHERE id = $1")
+        .bind(new_active.unwrap().id)
+        .execute(pool.get_ref())
+        .await;
+
+    if res.is_err() {
+        return Err(res.unwrap_err());
+    }
+
+    return Ok(());
 }
