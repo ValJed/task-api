@@ -19,9 +19,10 @@ pub fn get_scope() -> Scope {
 
 #[get("")]
 pub async fn fetch_all(pool: web::Data<Pool<Postgres>>) -> impl Responder {
-    let contexts_res: Result<Vec<Context>, sqlx::Error> = sqlx::query_as("SELECT * FROM context")
-        .fetch_all(pool.get_ref())
-        .await;
+    let contexts_res: Result<Vec<Context>, sqlx::Error> =
+        sqlx::query_as("SELECT * FROM context ORDER BY id ASC")
+            .fetch_all(pool.get_ref())
+            .await;
 
     match contexts_res {
         Ok(contexts) => HttpResponse::Ok().json(contexts),
