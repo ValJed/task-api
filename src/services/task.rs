@@ -144,7 +144,7 @@ pub async fn update(
 
     let set_content = if data.content.is_some() {
         let content = data.content.clone().unwrap();
-        format!("content = {}", content)
+        format!("content = '{}'", content)
     } else {
         String::new()
     };
@@ -174,7 +174,9 @@ pub async fn update(
         .await;
 
     match task_res {
-        Ok(task) => return HttpResponse::Ok().json(task),
+        Ok(task) => {
+            return HttpResponse::Ok().json(task);
+        }
         Err(err) => return handle_err(err),
     }
 }
