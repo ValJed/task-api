@@ -16,6 +16,7 @@ pub fn get_scope() -> Scope {
         .service(create)
         .service(update)
         .service(delete)
+        .service(delete_all)
 }
 
 #[get("")]
@@ -38,15 +39,18 @@ pub async fn fetch(
     }
 
     let active = query.active.unwrap_or(false);
+    println!("active: {:?}", active);
     let partial_req = match active {
         true => "WHERE context.active = true",
         false => "",
     };
+    println!("partial_req: {:?}", partial_req);
     let request = format!(
         r#"
         SELECT 
           context.id,
           context.name,
+          context.active,
           json_agg(json_build_object('id', task.id, 'content', task.content, 'done', task.done)) AS tasks
         FROM context
         INNER JOIN task
@@ -59,9 +63,11 @@ pub async fn fetch(
 
     let tasks_res: Result<Vec<FullContext>, sqlx::Error> =
         sqlx::query_as(&request).fetch_all(pool.get_ref()).await;
+    println!("tasks_res: {:?}", tasks_res);
 
     match tasks_res {
         Ok(tasks) => {
+            println!("tasks: {:?}", tasks);
             // TODO: Test response when no active context
             if active && tasks.len() == 1 {
                 return HttpResponse::Ok().json(&tasks[0]);
@@ -192,6 +198,20 @@ pub async fn delete(pool: web::Data<Pool<Postgres>>, id: web::Path<i32>) -> impl
     match deleted {
         Ok(task) => {
             return HttpResponse::Ok().json(task);
+        }
+        Err(err) => return handle_err(err),
+    }
+}
+
+#[delete("")]
+pub async fn delete_all(pool: web::Data<Pool<Postgres>>) -> impl Responder {
+    let deleted: Result<(), sqlx::Error> = sqlx::query_as("DELETE from task")
+        .fetch_one(pool.get_ref())
+        .await;
+
+    match deleted {
+        Ok(_) => {
+            return HttpResponse::Ok().body("All tasks deleted");
         }
         Err(err) => return handle_err(err),
     }

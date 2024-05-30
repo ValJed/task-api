@@ -13,8 +13,9 @@ pub fn get_scope() -> Scope {
     web::scope("/context")
         .service(fetch_all)
         .service(use_or_create)
-        .service(delete)
         .service(update)
+        .service(delete)
+        .service(delete_all)
 }
 
 #[get("")]
@@ -109,48 +110,6 @@ pub async fn clear(pool: web::Data<Pool<Postgres>>, id: web::Path<i32>) -> impl 
     HttpResponse::Ok().body("Context cleared")
 }
 
-#[delete("/{id}")]
-pub async fn delete(pool: web::Data<Pool<Postgres>>, id: web::Path<i32>) -> impl Responder {
-    let deleted_tasks = sqlx::query("DELETE FROM task WHERE context_id = $1")
-        .bind(*id)
-        .execute(pool.get_ref())
-        .await;
-
-    if deleted_tasks.is_err() {
-        return HttpResponse::InternalServerError().body("Internal Server Error");
-    }
-
-    let deleted: Result<Context, sqlx::Error> =
-        sqlx::query_as("DELETE FROM context WHERE id = $1 RETURNING * ")
-            .bind(*id)
-            .fetch_one(pool.get_ref())
-            .await;
-
-    println!("deleted: {:?}", deleted);
-
-    match deleted {
-        Ok(ctx) => {
-            if ctx.active {
-                let cleaned = clean_active(&pool, ctx.id, ctx.active).await;
-
-                if cleaned.is_err() {
-                    return HttpResponse::InternalServerError().body("Internal Server Error");
-                }
-            }
-
-            return HttpResponse::Ok().json(ctx);
-        }
-        Err(err) => match err {
-            sqlx::Error::RowNotFound => {
-                return HttpResponse::NotFound().body("Context not found");
-            }
-            _ => {
-                return HttpResponse::InternalServerError().body("Internal Server Error");
-            }
-        },
-    }
-}
-
 #[put("/{id}")]
 pub async fn update(
     pool: web::Data<Pool<Postgres>>,
@@ -231,4 +190,61 @@ async fn clean_active(
     }
 
     return Ok(());
+}
+
+#[delete("/{id}")]
+pub async fn delete(pool: web::Data<Pool<Postgres>>, id: web::Path<i32>) -> impl Responder {
+    let deleted_tasks = sqlx::query("DELETE FROM task WHERE context_id = $1")
+        .bind(*id)
+        .execute(pool.get_ref())
+        .await;
+
+    if deleted_tasks.is_err() {
+        return HttpResponse::InternalServerError().body("Internal Server Error");
+    }
+
+    let deleted: Result<Context, sqlx::Error> =
+        sqlx::query_as("DELETE FROM context WHERE id = $1 RETURNING * ")
+            .bind(*id)
+            .fetch_one(pool.get_ref())
+            .await;
+
+    match deleted {
+        Ok(ctx) => {
+            if ctx.active {
+                let cleaned = clean_active(&pool, ctx.id, ctx.active).await;
+
+                if cleaned.is_err() {
+                    return HttpResponse::InternalServerError().body("Internal Server Error");
+                }
+            }
+
+            return HttpResponse::Ok().json(ctx);
+        }
+        Err(err) => match err {
+            sqlx::Error::RowNotFound => {
+                return HttpResponse::NotFound().body("Context not found");
+            }
+            _ => {
+                return HttpResponse::InternalServerError().body("Internal Server Error");
+            }
+        },
+    }
+}
+
+#[delete("")]
+pub async fn delete_all(pool: web::Data<Pool<Postgres>>) -> impl Responder {
+    println!("deleting all contexts");
+    let deleted: Result<(), sqlx::Error> = sqlx::query_as("DELETE from context")
+        .fetch_one(pool.get_ref())
+        .await;
+
+    println!("deleted: {:?}", deleted);
+
+    match deleted {
+        Ok(_) => {
+            return HttpResponse::Ok().body("All contexts deleted");
+        }
+        Err(err) => return handle_err(err),
+    }
 }
