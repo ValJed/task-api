@@ -15,9 +15,10 @@ pub struct Context {
     pub active: bool,
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug)]
 pub struct ContextRequest {
     pub name: String,
+    pub active: Option<bool>,
     pub simple_create: Option<bool>,
 }
 

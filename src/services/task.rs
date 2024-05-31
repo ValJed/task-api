@@ -213,6 +213,11 @@ pub async fn delete_all(pool: web::Data<Pool<Postgres>>) -> impl Responder {
         Ok(_) => {
             return HttpResponse::Ok().body("All tasks deleted");
         }
-        Err(err) => return handle_err(err),
+        Err(err) => match err {
+            sqlx::Error::RowNotFound => {
+                return HttpResponse::Ok().body("All contexts deleted");
+            }
+            _ => return handle_err(err),
+        },
     }
 }

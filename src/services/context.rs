@@ -41,9 +41,11 @@ pub async fn use_or_create(
     };
 
     if data.simple_create.is_some() && data.simple_create.unwrap() {
+        let active = data.active.unwrap_or(false);
         let context: Result<Context, sqlx::Error> =
-            sqlx::query_as("INSERT INTO context (name) VALUES ($1) RETURNING *")
+            sqlx::query_as("INSERT INTO context (name, active) VALUES ($1, $2) RETURNING *")
                 .bind(data.name.clone())
+                .bind(active)
                 .fetch_one(pool.get_ref())
                 .await;
 
@@ -234,7 +236,6 @@ pub async fn delete(pool: web::Data<Pool<Postgres>>, id: web::Path<i32>) -> impl
 
 #[delete("")]
 pub async fn delete_all(pool: web::Data<Pool<Postgres>>) -> impl Responder {
-    println!("deleting all contexts");
     let deleted: Result<(), sqlx::Error> = sqlx::query_as("DELETE from context")
         .fetch_one(pool.get_ref())
         .await;
@@ -245,6 +246,12 @@ pub async fn delete_all(pool: web::Data<Pool<Postgres>>) -> impl Responder {
         Ok(_) => {
             return HttpResponse::Ok().body("All contexts deleted");
         }
-        Err(err) => return handle_err(err),
+        Err(err) => match err {
+            sqlx::Error::RowNotFound => {
+                println!("Row not found");
+                return HttpResponse::Ok().body("All contexts deleted");
+            }
+            _ => return handle_err(err),
+        },
     }
 }
