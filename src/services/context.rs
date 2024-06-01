@@ -104,7 +104,6 @@ pub async fn clear(pool: web::Data<Pool<Postgres>>, id: web::Path<i32>) -> impl 
         .execute(pool.get_ref())
         .await;
 
-    println!("deleted_tasks: {:?}", deleted_tasks);
     if deleted_tasks.is_err() {
         return HttpResponse::InternalServerError().body("Internal Server Error");
     }
@@ -240,15 +239,12 @@ pub async fn delete_all(pool: web::Data<Pool<Postgres>>) -> impl Responder {
         .fetch_one(pool.get_ref())
         .await;
 
-    println!("deleted: {:?}", deleted);
-
     match deleted {
         Ok(_) => {
             return HttpResponse::Ok().body("All contexts deleted");
         }
         Err(err) => match err {
             sqlx::Error::RowNotFound => {
-                println!("Row not found");
                 return HttpResponse::Ok().body("All contexts deleted");
             }
             _ => return handle_err(err),

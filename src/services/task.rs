@@ -5,6 +5,7 @@ mod structs;
 mod utils;
 
 use actix_web::{delete, get, post, put, web, HttpResponse, Responder, Scope};
+use serde::Deserialize;
 use sqlx::{Pool, Postgres};
 use structs::{Context, FullContext, Task, TaskGetRequest, TaskPutRequest, TaskRequest};
 use utils::handle_err;
@@ -14,6 +15,7 @@ pub fn get_scope() -> Scope {
         .service(fetch)
         .service(fetch_one)
         .service(create)
+        .service(create_batch)
         .service(update)
         .service(delete)
         .service(delete_all)
@@ -39,7 +41,6 @@ pub async fn fetch(
     }
 
     let active = query.active.unwrap_or(false);
-    println!("active: {:?}", active);
     let partial_req = match active {
         true => "WHERE context.active = true",
         false => "",
@@ -63,7 +64,6 @@ pub async fn fetch(
 
     let tasks_res: Result<Vec<FullContext>, sqlx::Error> =
         sqlx::query_as(&request).fetch_all(pool.get_ref()).await;
-    println!("tasks_res: {:?}", tasks_res);
 
     match tasks_res {
         Ok(tasks) => {
@@ -134,6 +134,37 @@ pub async fn create(
 
     match task_res {
         Ok(task) => return HttpResponse::Ok().json(task),
+        Err(err) => return handle_err(err),
+    }
+}
+
+#[post("/batch")]
+pub async fn create_batch(
+    pool: web::Data<Pool<Postgres>>,
+    data: web::Json<Vec<TaskRequest>>,
+) -> impl Responder {
+    // Inserting multiple items at once has limits
+    // that should not be exceeded in this case
+    let tasks_str = data
+        .iter()
+        .map(|task| {
+            format!(
+                "('{}', {})",
+                task.content.clone(),
+                task.context_id.clone().unwrap()
+            )
+        })
+        .collect::<Vec<String>>()
+        .join(", ");
+
+    let request = format!(
+        "INSERT INTO task (content, context_id) VALUES {}",
+        tasks_str
+    );
+
+    let inserted = sqlx::query(&request).execute(pool.get_ref()).await;
+    match inserted {
+        Ok(_) => return HttpResponse::Ok().body("Tasks created"),
         Err(err) => return handle_err(err),
     }
 }
