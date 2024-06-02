@@ -1,4 +1,4 @@
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::types::Json;
 use sqlx::{FromRow, Pool, Postgres};
@@ -15,6 +15,14 @@ pub struct Context {
     pub active: bool,
 }
 
+#[derive(Serialize, Deserialize, FromRow, Debug)]
+pub struct ContextTaskCount {
+    pub id: i32,
+    pub name: String,
+    pub active: bool,
+    pub task_count: i64,
+}
+
 #[derive(Deserialize, Debug)]
 pub struct ContextRequest {
     pub name: String,
@@ -22,19 +30,26 @@ pub struct ContextRequest {
     pub simple_create: Option<bool>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct GetContextQuery {
+    pub count: Option<bool>,
+}
+
 #[derive(Serialize, Deserialize, FromRow, Debug)]
 pub struct Task {
     id: i32,
     content: String,
     done: bool,
-    creation_date: Option<NaiveDateTime>,
-    modification_date: Option<NaiveDateTime>,
+    creation_date: String,
+    modification_date: String,
 }
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct TaskRequest {
     pub content: String,
     pub context_id: Option<i32>,
+    pub creation_date: Option<String>,
+    pub modification_date: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Clone)]

@@ -5,7 +5,7 @@ mod structs;
 mod utils;
 
 use actix_web::{delete, get, post, put, web, HttpResponse, Responder, Scope};
-use serde::Deserialize;
+use chrono::Local;
 use sqlx::{Pool, Postgres};
 use structs::{Context, FullContext, Task, TaskGetRequest, TaskPutRequest, TaskRequest};
 use utils::handle_err;
@@ -45,14 +45,20 @@ pub async fn fetch(
         true => "WHERE context.active = true",
         false => "",
     };
-    println!("partial_req: {:?}", partial_req);
     let request = format!(
         r#"
         SELECT 
           context.id,
           context.name,
           context.active,
-          json_agg(json_build_object('id', task.id, 'content', task.content, 'done', task.done)) AS tasks
+          json_agg(
+            json_build_object(
+                'id', task.id, 
+                'content', task.content, 
+                'done', task.done, 
+                'creation_date', task.creation_date, 
+                'modification_date', task.modification_date)
+            ) AS tasks
         FROM context
         INNER JOIN task
         ON task.context_id = context.id
@@ -67,13 +73,8 @@ pub async fn fetch(
 
     match tasks_res {
         Ok(tasks) => {
-            println!("tasks: {:?}", tasks);
             // TODO: Test response when no active context
-            if active && tasks.len() == 1 {
-                return HttpResponse::Ok().json(&tasks[0]);
-            } else {
-                return HttpResponse::Ok().json(tasks);
-            }
+            return HttpResponse::Ok().json(tasks);
         }
         Err(err) => return handle_err(err),
     }
@@ -125,10 +126,12 @@ pub async fn create(
         context_id = active.unwrap().id;
     }
 
+    let date = Local::now().to_string();
     let task_res: Result<Task, sqlx::Error> =
-        sqlx::query_as("INSERT INTO task (content, context_id) VALUES ($1, $2) RETURNING *")
+        sqlx::query_as("INSERT INTO task (content, context_id, creation_date, modification_date) VALUES ($1, $2, $3, $3) RETURNING *")
             .bind(data.content.clone())
             .bind(context_id)
+            .bind(date)
             .fetch_one(pool.get_ref())
             .await;
 
@@ -143,22 +146,26 @@ pub async fn create_batch(
     pool: web::Data<Pool<Postgres>>,
     data: web::Json<Vec<TaskRequest>>,
 ) -> impl Responder {
+    let date = Local::now().to_string();
+
     // Inserting multiple items at once has limits
     // that should not be exceeded in this case
     let tasks_str = data
         .iter()
         .map(|task| {
             format!(
-                "('{}', {})",
+                "('{}', {}, '{}', '{}')",
                 task.content.clone(),
-                task.context_id.clone().unwrap()
+                task.context_id.clone().unwrap(),
+                task.creation_date.clone().unwrap_or(date.clone()),
+                task.modification_date.clone().unwrap_or(date.clone())
             )
         })
         .collect::<Vec<String>>()
         .join(", ");
 
     let request = format!(
-        "INSERT INTO task (content, context_id) VALUES {}",
+        "INSERT INTO task (content, context_id, creation_date, modification_date) VALUES {}",
         tasks_str
     );
 
