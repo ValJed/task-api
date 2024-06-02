@@ -3,8 +3,8 @@ CREATE TABLE IF NOT EXISTS task (
     content VARCHAR(1000) NOT NULL,
     context_id INT NOT NULL,
     done BOOLEAN NOT NULL DEFAULT FALSE,
-    creation_date TIMESTAMP NOT NULL DEFAULT CURRENT_DATE,
-    modification_date TIMESTAMP NOT NULL DEFAULT CURRENT_DATE
+    creation_date VARCHAR(100) NOT NULL,
+    modification_date VARCHAR(100) NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS context (

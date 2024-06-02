@@ -64,6 +64,14 @@ pub struct TaskGetRequest {
     pub context_id: Option<i32>,
 }
 
+#[derive(Serialize, Debug)]
+pub struct FullContextTask {
+    pub id: i32,
+    pub name: String,
+    pub active: bool,
+    pub tasks: Vec<Task>,
+}
+
 #[derive(Serialize, Deserialize, FromRow, Debug)]
 pub struct FullContext {
     pub id: i32,

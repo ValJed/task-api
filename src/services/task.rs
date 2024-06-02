@@ -51,17 +51,18 @@ pub async fn fetch(
           context.id,
           context.name,
           context.active,
-          json_agg(
+          COALESCE(json_agg(
             json_build_object(
                 'id', task.id, 
                 'content', task.content, 
                 'done', task.done, 
                 'creation_date', task.creation_date, 
                 'modification_date', task.modification_date)
-            ) AS tasks
+            ) FILTER (WHERE task.id IS NOT NULL), '[]') AS tasks
         FROM context
-        INNER JOIN task
+        LEFT JOIN task
         ON task.context_id = context.id
+        WHERE context.active IS NOT NULL
         {}
         GROUP BY context.id;
         "#,
@@ -76,7 +77,10 @@ pub async fn fetch(
             // TODO: Test response when no active context
             return HttpResponse::Ok().json(tasks);
         }
-        Err(err) => return handle_err(err),
+        Err(err) => {
+            println!("err: {:?}", err);
+            return handle_err(err);
+        }
     }
 }
 
@@ -126,7 +130,7 @@ pub async fn create(
         context_id = active.unwrap().id;
     }
 
-    let date = Local::now().to_string();
+    let date = Local::now();
     let task_res: Result<Task, sqlx::Error> =
         sqlx::query_as("INSERT INTO task (content, context_id, creation_date, modification_date) VALUES ($1, $2, $3, $3) RETURNING *")
             .bind(data.content.clone())
@@ -135,6 +139,7 @@ pub async fn create(
             .fetch_one(pool.get_ref())
             .await;
 
+    println!("tasks_res: {:?}", task_res);
     match task_res {
         Ok(task) => return HttpResponse::Ok().json(task),
         Err(err) => return handle_err(err),

@@ -6,7 +6,7 @@ mod utils;
 
 use actix_web::{delete, get, post, put, web, HttpResponse, Responder, Result, Scope};
 use sqlx::{Pool, Postgres};
-use structs::{Context, ContextRequest, ContextTaskCount, GetContextQuery};
+use structs::{Context, ContextRequest, ContextTaskCount, FullContext, FullContextTask};
 use utils::handle_err;
 
 pub fn get_scope() -> Scope {
@@ -23,7 +23,7 @@ pub async fn fetch_all(pool: web::Data<Pool<Postgres>>) -> impl Responder {
     let request = r#"
         SELECT context.*, COUNT(task.id) AS task_count 
         FROM context 
-        INNER JOIN task 
+        LEFT JOIN task 
         ON task.context_id = context.id 
         GROUP BY context.id 
         ORDER BY context.id ASC
@@ -31,6 +31,8 @@ pub async fn fetch_all(pool: web::Data<Pool<Postgres>>) -> impl Responder {
 
     let contexts_res: Result<Vec<ContextTaskCount>, sqlx::Error> =
         sqlx::query_as(request).fetch_all(pool.get_ref()).await;
+
+    println!("contexts_res: {:?}", contexts_res);
 
     match contexts_res {
         Ok(contexts) => HttpResponse::Ok().json(contexts),
@@ -86,22 +88,55 @@ pub async fn use_or_create(
 
     let ctx = existing.unwrap();
 
-    if ctx.is_some() {
-        return HttpResponse::Ok().json(ctx.unwrap());
+    if ctx.is_none() {
+        let context: Result<Context, sqlx::Error> =
+            sqlx::query_as("INSERT INTO context (name, active) VALUES ($1, $2) RETURNING *")
+                .bind(data.name.clone())
+                .bind(true)
+                .fetch_one(pool.get_ref())
+                .await;
+
+        match context {
+            Ok(ctx) => {
+                let filled = FullContextTask {
+                    id: ctx.id,
+                    name: ctx.name,
+                    active: ctx.active,
+                    tasks: vec![],
+                };
+                return HttpResponse::Ok().json(filled);
+            }
+            Err(err) => return handle_err(err),
+        }
     }
 
-    let context: Result<Context, sqlx::Error> =
-        sqlx::query_as("INSERT INTO context (name, active) VALUES ($1, $2) RETURNING *")
-            .bind(data.name.clone())
-            .bind(true)
-            .fetch_one(pool.get_ref())
-            .await;
+    let request = r#"
+        SELECT 
+        context.id,
+        context.name,
+        context.active,
+        COALESCE(json_agg(
+            json_build_object(
+                'id', task.id, 
+                'content', task.content, 
+                'done', task.done, 
+                'creation_date', task.creation_date, 
+                'modification_date', task.modification_date)
+            ) FILTER (WHERE task.id IS NOT NULL), '[]') AS tasks
+        FROM context
+        LEFT JOIN task
+        ON task.context_id = context.id
+        WHERE context.active = true
+        GROUP BY context.id
+        "#;
 
-    if context.is_err() {
-        return HttpResponse::InternalServerError().body("Internal Server Error");
+    let filled_ctx: Result<FullContext, sqlx::Error> =
+        sqlx::query_as(request).fetch_one(pool.get_ref()).await;
+
+    match filled_ctx {
+        Ok(ctx) => return HttpResponse::Ok().json(ctx),
+        Err(err) => return handle_err(err),
     }
-
-    HttpResponse::Ok().json(context.unwrap())
 }
 
 #[post("/clear/{id}")]
