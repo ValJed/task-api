@@ -7,7 +7,9 @@ mod utils;
 use actix_web::{delete, get, post, put, web, HttpResponse, Responder, Scope};
 use chrono::Local;
 use sqlx::{Pool, Postgres};
-use structs::{Context, FullContext, Task, TaskGetRequest, TaskPutRequest, TaskRequest};
+use structs::{
+    Context, DeleteTaskQuery, FullContext, Task, TaskGetRequest, TaskPutRequest, TaskRequest,
+};
 use utils::handle_err;
 
 pub fn get_scope() -> Scope {
@@ -62,7 +64,6 @@ pub async fn fetch(
         FROM context
         LEFT JOIN task
         ON task.context_id = context.id
-        WHERE context.active IS NOT NULL
         {}
         GROUP BY context.id;
         "#,
@@ -71,6 +72,8 @@ pub async fn fetch(
 
     let tasks_res: Result<Vec<FullContext>, sqlx::Error> =
         sqlx::query_as(&request).fetch_all(pool.get_ref()).await;
+
+    println!("tasks_res: {:?}", tasks_res);
 
     match tasks_res {
         Ok(tasks) => {
@@ -231,10 +234,24 @@ pub async fn update(
 }
 
 #[delete("/{id}")]
-pub async fn delete(pool: web::Data<Pool<Postgres>>, id: web::Path<i32>) -> impl Responder {
+pub async fn delete(
+    pool: web::Data<Pool<Postgres>>,
+    id: web::Path<i32>,
+    query: web::Query<DeleteTaskQuery>,
+) -> impl Responder {
+    let mut task_id = *id;
+    if query.index.is_some() && query.index.unwrap() {
+        let task = find_task_from_index(&pool, *id - 1).await;
+        if task.is_none() {
+            return HttpResponse::NotFound().body("Task not found");
+        }
+
+        task_id = task.unwrap().id;
+    }
+
     let deleted: Result<Task, sqlx::Error> =
         sqlx::query_as("DELETE from task WHERE id = $1 RETURNING *")
-            .bind(*id)
+            .bind(task_id)
             .fetch_one(pool.get_ref())
             .await;
 
@@ -262,5 +279,23 @@ pub async fn delete_all(pool: web::Data<Pool<Postgres>>) -> impl Responder {
             }
             _ => return handle_err(err),
         },
+    }
+}
+
+async fn find_task_from_index(pool: &web::Data<Pool<Postgres>>, index: i32) -> Option<Task> {
+    let request = r#"
+        SELECT task.* 
+        FROM context 
+        INNER JOIN task ON task.context_id = context.id 
+        WHERE context.active = true ORDER BY task.id ASC;
+    "#;
+    let tasks: Result<Vec<Task>, sqlx::Error> =
+        sqlx::query_as(request).fetch_all(pool.get_ref()).await;
+
+    match tasks {
+        Ok(tasks) => {
+            return tasks.get(index as usize).cloned();
+        }
+        Err(_) => None,
     }
 }

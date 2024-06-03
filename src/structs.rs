@@ -35,9 +35,9 @@ pub struct GetContextQuery {
     pub count: Option<bool>,
 }
 
-#[derive(Serialize, Deserialize, FromRow, Debug)]
+#[derive(Serialize, Deserialize, FromRow, Debug, Clone)]
 pub struct Task {
-    id: i32,
+    pub id: i32,
     content: String,
     done: bool,
     creation_date: String,
@@ -62,6 +62,11 @@ pub struct TaskPutRequest {
 pub struct TaskGetRequest {
     pub active: Option<bool>,
     pub context_id: Option<i32>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct DeleteTaskQuery {
+    pub index: Option<bool>,
 }
 
 #[derive(Serialize, Debug)]
