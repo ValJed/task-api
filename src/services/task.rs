@@ -8,7 +8,7 @@ use actix_web::{delete, get, post, put, web, HttpResponse, Responder, Scope};
 use chrono::Local;
 use sqlx::{Pool, Postgres};
 use structs::{
-    Context, DeleteTaskQuery, FullContext, Task, TaskGetRequest, TaskPutRequest, TaskRequest,
+    Context, FullContext, IndexQuery, Task, TaskGetRequest, TaskPutRequest, TaskRequest,
 };
 use utils::handle_err;
 
@@ -188,11 +188,19 @@ pub async fn create_batch(
 pub async fn update(
     pool: web::Data<Pool<Postgres>>,
     data: web::Json<TaskPutRequest>,
+    query: web::Query<IndexQuery>,
     id: web::Path<i32>,
 ) -> impl Responder {
     if data.content.is_none() && data.done.is_none() {
         return HttpResponse::BadRequest().body("Content or done is required");
     }
+    println!("query.index: {:?}", query.index);
+
+    let task_id = get_id_from_index(&pool, *id, query.index).await;
+    if task_id.is_none() {
+        return HttpResponse::NotFound().body("Task not found");
+    }
+    println!("task_id: {:?}", task_id);
 
     let set_content = if data.content.is_some() {
         let content = data.content.clone().unwrap();
@@ -221,7 +229,7 @@ pub async fn update(
     );
 
     let task_res: Result<Task, sqlx::Error> = sqlx::query_as(&request)
-        .bind(*id)
+        .bind(task_id)
         .fetch_one(pool.get_ref())
         .await;
 
@@ -237,21 +245,16 @@ pub async fn update(
 pub async fn delete(
     pool: web::Data<Pool<Postgres>>,
     id: web::Path<i32>,
-    query: web::Query<DeleteTaskQuery>,
+    query: web::Query<IndexQuery>,
 ) -> impl Responder {
-    let mut task_id = *id;
-    if query.index.is_some() && query.index.unwrap() {
-        let task = find_task_from_index(&pool, *id - 1).await;
-        if task.is_none() {
-            return HttpResponse::NotFound().body("Task not found");
-        }
-
-        task_id = task.unwrap().id;
+    let task_id = get_id_from_index(&pool, *id, query.index).await;
+    if task_id.is_none() {
+        return HttpResponse::NotFound().body("Task not found");
     }
 
     let deleted: Result<Task, sqlx::Error> =
         sqlx::query_as("DELETE from task WHERE id = $1 RETURNING *")
-            .bind(task_id)
+            .bind(task_id.unwrap())
             .fetch_one(pool.get_ref())
             .await;
 
@@ -282,7 +285,14 @@ pub async fn delete_all(pool: web::Data<Pool<Postgres>>) -> impl Responder {
     }
 }
 
-async fn find_task_from_index(pool: &web::Data<Pool<Postgres>>, index: i32) -> Option<Task> {
+async fn get_id_from_index(
+    pool: &web::Data<Pool<Postgres>>,
+    index: i32,
+    by_index: Option<bool>,
+) -> Option<i32> {
+    if by_index.is_none() || !by_index.unwrap() {
+        return Some(index);
+    }
     let request = r#"
         SELECT task.* 
         FROM context 
@@ -293,9 +303,10 @@ async fn find_task_from_index(pool: &web::Data<Pool<Postgres>>, index: i32) -> O
         sqlx::query_as(request).fetch_all(pool.get_ref()).await;
 
     match tasks {
-        Ok(tasks) => {
-            return tasks.get(index as usize).cloned();
-        }
+        Ok(tasks) => match tasks.get(index as usize - 1).cloned() {
+            Some(task) => return Some(task.id),
+            None => return None,
+        },
         Err(_) => None,
     }
 }

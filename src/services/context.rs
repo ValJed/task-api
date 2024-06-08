@@ -6,7 +6,9 @@ mod utils;
 
 use actix_web::{delete, get, post, put, web, HttpResponse, Responder, Result, Scope};
 use sqlx::{Pool, Postgres};
-use structs::{Context, ContextRequest, ContextTaskCount, FullContext, FullContextTask};
+use structs::{
+    Context, ContextName, ContextRequest, ContextTaskCount, FullContext, FullContextTask,
+};
 use utils::handle_err;
 
 pub fn get_scope() -> Scope {
@@ -14,6 +16,7 @@ pub fn get_scope() -> Scope {
         .service(fetch_all)
         .service(use_or_create)
         .service(update)
+        .service(update_by_index)
         .service(delete)
         .service(delete_all)
 }
@@ -151,6 +154,34 @@ pub async fn clear(pool: web::Data<Pool<Postgres>>, id: web::Path<i32>) -> impl 
     }
 
     HttpResponse::Ok().body("Context cleared")
+}
+
+#[put("/index/{index}")]
+pub async fn update_by_index(
+    pool: web::Data<Pool<Postgres>>,
+    data: web::Json<ContextName>,
+    index: web::Path<i32>,
+) -> impl Responder {
+    if data.name.is_empty() {
+        return HttpResponse::BadRequest().body("Name is required");
+    }
+    let id = get_context_by_index(&pool, *index).await;
+    println!("id: {:?}", id);
+    if id.is_none() {
+        return HttpResponse::NotFound().body("Context not found");
+    }
+
+    let updated: Result<Context, sqlx::Error> =
+        sqlx::query_as("UPDATE context SET name = $1 WHERE id = $2 RETURNING *")
+            .bind(data.name.clone())
+            .bind(id.unwrap())
+            .fetch_one(pool.get_ref())
+            .await;
+
+    match updated {
+        Ok(ctx) => HttpResponse::Ok().json(ctx),
+        Err(err) => handle_err(err),
+    }
 }
 
 #[put("/{id}")]
@@ -291,5 +322,23 @@ pub async fn delete_all(pool: web::Data<Pool<Postgres>>) -> impl Responder {
             }
             _ => return handle_err(err),
         },
+    }
+}
+
+async fn get_context_by_index(pool: &web::Data<Pool<Postgres>>, index: i32) -> Option<i32> {
+    let request = r#"
+        SELECT * 
+        FROM context 
+        ORDER BY context.id ASC;
+    "#;
+    let contexts: Result<Vec<Context>, sqlx::Error> =
+        sqlx::query_as(request).fetch_all(pool.get_ref()).await;
+
+    match contexts {
+        Ok(contexts) => match contexts.get(index as usize - 1).cloned() {
+            Some(ctx) => Some(ctx.id),
+            None => None,
+        },
+        Err(_) => None,
     }
 }

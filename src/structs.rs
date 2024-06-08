@@ -8,11 +8,16 @@ pub struct AppState {
     pub db: Pool<Postgres>,
 }
 
-#[derive(Serialize, Deserialize, FromRow, Debug)]
+#[derive(Serialize, Deserialize, FromRow, Debug, Clone)]
 pub struct Context {
     pub id: i32,
     pub name: String,
     pub active: bool,
+}
+
+#[derive(Serialize, Deserialize, FromRow, Debug)]
+pub struct ContextName {
+    pub name: String,
 }
 
 #[derive(Serialize, Deserialize, FromRow, Debug)]
@@ -65,7 +70,7 @@ pub struct TaskGetRequest {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct DeleteTaskQuery {
+pub struct IndexQuery {
     pub index: Option<bool>,
 }
 
