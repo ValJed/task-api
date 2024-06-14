@@ -20,6 +20,7 @@ pub fn get_scope() -> Scope {
         .service(update_by_index)
         .service(delete)
         .service(delete_all)
+        .service(clear_active)
 }
 
 #[get("")]
@@ -143,6 +144,30 @@ pub async fn use_or_create(
     }
 }
 
+#[post("/clear")]
+pub async fn clear_active(pool: web::Data<Pool<Postgres>>) -> impl Responder {
+    let active_ctx: Result<Context, sqlx::Error> =
+        sqlx::query_as("SELECT * FROM context WHERE active = true")
+            .fetch_one(pool.get_ref())
+            .await;
+
+    if active_ctx.is_err() {
+        return HttpResponse::NotFound().body("Active context not found");
+    }
+
+    let deleted_tasks = sqlx::query("DELETE FROM task WHERE context_id = $1")
+        .bind(active_ctx.unwrap().id)
+        .execute(pool.get_ref())
+        .await;
+
+    if deleted_tasks.is_err() {
+        return HttpResponse::InternalServerError().body("Internal Server Error");
+    }
+
+    HttpResponse::Ok().body("Context cleared")
+}
+
+// Not used right now
 #[post("/clear/{id}")]
 pub async fn clear(pool: web::Data<Pool<Postgres>>, id: web::Path<i32>) -> impl Responder {
     let deleted_tasks = sqlx::query("DELETE FROM task WHERE context_id = $1")
