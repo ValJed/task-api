@@ -21,6 +21,7 @@ pub fn get_scope() -> Scope {
         .service(update)
         .service(delete)
         .service(delete_all)
+        .service(toggle_done)
 }
 
 #[get("")]
@@ -72,8 +73,6 @@ pub async fn fetch(
 
     let tasks_res: Result<Vec<FullContext>, sqlx::Error> =
         sqlx::query_as(&request).fetch_all(pool.get_ref()).await;
-
-    println!("tasks_res: {:?}", tasks_res);
 
     match tasks_res {
         Ok(tasks) => {
@@ -184,6 +183,25 @@ pub async fn create_batch(
     }
 }
 
+#[put("/done/{id}")]
+pub async fn toggle_done(
+    pool: web::Data<Pool<Postgres>>,
+    id: web::Path<i32>,
+    query: web::Query<IndexQuery>,
+) -> impl Responder {
+    let task_id = get_id_from_index(&pool, *id, query.index).await;
+    let task: Result<Task, sqlx::Error> =
+        sqlx::query_as("UPDATE task SET done = NOT done WHERE id = $1")
+            .bind(task_id)
+            .fetch_one(pool.get_ref())
+            .await;
+
+    match task {
+        Ok(task) => HttpResponse::Ok().json(task),
+        Err(err) => handle_err(err),
+    }
+}
+
 #[put("/{id}")]
 pub async fn update(
     pool: web::Data<Pool<Postgres>>,
@@ -194,13 +212,11 @@ pub async fn update(
     if data.content.is_none() && data.done.is_none() {
         return HttpResponse::BadRequest().body("Content or done is required");
     }
-    println!("query.index: {:?}", query.index);
 
     let task_id = get_id_from_index(&pool, *id, query.index).await;
     if task_id.is_none() {
         return HttpResponse::NotFound().body("Task not found");
     }
-    println!("task_id: {:?}", task_id);
 
     let set_content = if data.content.is_some() {
         let content = data.content.clone().unwrap();
