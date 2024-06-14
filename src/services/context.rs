@@ -8,6 +8,7 @@ use actix_web::{delete, get, post, put, web, HttpResponse, Responder, Result, Sc
 use sqlx::{Pool, Postgres};
 use structs::{
     Context, ContextName, ContextRequest, ContextTaskCount, FullContext, FullContextTask,
+    IndexQuery,
 };
 use utils::handle_err;
 
@@ -165,8 +166,7 @@ pub async fn update_by_index(
     if data.name.is_empty() {
         return HttpResponse::BadRequest().body("Name is required");
     }
-    let id = get_context_by_index(&pool, *index).await;
-    println!("id: {:?}", id);
+    let id = get_context_by_index(&pool, *index, true).await;
     if id.is_none() {
         return HttpResponse::NotFound().body("Context not found");
     }
@@ -267,9 +267,16 @@ async fn clean_active(
 }
 
 #[delete("/{id}")]
-pub async fn delete(pool: web::Data<Pool<Postgres>>, id: web::Path<i32>) -> impl Responder {
+pub async fn delete(
+    pool: web::Data<Pool<Postgres>>,
+    id: web::Path<i32>,
+    query: web::Query<IndexQuery>,
+) -> impl Responder {
+    let by_index = query.index.unwrap_or(false);
+    let ctx_id = get_context_by_index(&pool, *id, by_index).await;
+
     let deleted_tasks = sqlx::query("DELETE FROM task WHERE context_id = $1")
-        .bind(*id)
+        .bind(ctx_id)
         .execute(pool.get_ref())
         .await;
 
@@ -279,14 +286,15 @@ pub async fn delete(pool: web::Data<Pool<Postgres>>, id: web::Path<i32>) -> impl
 
     let deleted: Result<Context, sqlx::Error> =
         sqlx::query_as("DELETE FROM context WHERE id = $1 RETURNING * ")
-            .bind(*id)
+            .bind(ctx_id)
             .fetch_one(pool.get_ref())
             .await;
 
     match deleted {
         Ok(ctx) => {
+            println!("ctx: {:?}", ctx);
             if ctx.active {
-                let cleaned = clean_active(&pool, ctx.id, ctx.active).await;
+                let cleaned = clean_active(&pool, ctx.id, false).await;
 
                 if cleaned.is_err() {
                     return HttpResponse::InternalServerError().body("Internal Server Error");
@@ -325,7 +333,15 @@ pub async fn delete_all(pool: web::Data<Pool<Postgres>>) -> impl Responder {
     }
 }
 
-async fn get_context_by_index(pool: &web::Data<Pool<Postgres>>, index: i32) -> Option<i32> {
+async fn get_context_by_index(
+    pool: &web::Data<Pool<Postgres>>,
+    index: i32,
+    by_index: bool,
+) -> Option<i32> {
+    if !by_index {
+        return Some(index);
+    }
+
     let request = r#"
         SELECT * 
         FROM context 
