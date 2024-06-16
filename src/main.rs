@@ -1,4 +1,9 @@
-use actix_web::{web, App, HttpServer};
+use actix_web::body::MessageBody;
+use actix_web::{
+    dev::{ServiceRequest, ServiceResponse},
+    web, App, HttpServer,
+};
+use actix_web_lab::middleware::{from_fn, Next};
 use dotenv::dotenv;
 
 mod db;
@@ -19,14 +24,28 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         let context = context_scope();
         let task = task_scope();
-        // let data = AppState { db: pool.clone() };
 
         App::new()
             .app_data(web::Data::new(pool.clone()))
+            .wrap(from_fn(authorize))
             .service(context)
             .service(task)
     })
     .bind(("127.0.0.1", 3000))?
     .run()
     .await
+}
+
+async fn authorize(
+    req: ServiceRequest,
+    next: Next<impl MessageBody>,
+) -> Result<ServiceResponse<impl MessageBody>, actix_web::Error> {
+    let api_key = std::env::var("API_KEY").expect("API_KEY must be set");
+    let token = req.headers().get("AUTHORIZATION");
+
+    if token.is_none() || *token.unwrap() != api_key {
+        return Err(actix_web::error::ErrorUnauthorized("Not authorized"));
+    }
+
+    next.call(req).await
 }
