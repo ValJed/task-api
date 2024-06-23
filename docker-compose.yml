@@ -4,14 +4,12 @@ services:
       context: .
     ports:
       - "3000:3000"
-    volumes:
-      - .:/task-api
     environment:
       - DATABASE_URL
       - API_KEY    
     depends_on:
       - db
-    entrypoint: ["tail", "-f", "/dev/null"]
+    # entrypoint: ["tail", "-f", "/dev/null"]
   db:
     image: postgres:16
     ports:
