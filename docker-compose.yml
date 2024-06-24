@@ -8,8 +8,8 @@ services:
       - DATABASE_URL
       - API_KEY    
     depends_on:
-      - db
-    # entrypoint: ["tail", "-f", "/dev/null"]
+      db:
+        condition: service_healthy
   db:
     image: postgres:16
     ports:
@@ -19,6 +19,11 @@ services:
     restart: always
     environment:
       - POSTGRES_PASSWORD
+    healthcheck:
+      test: ["CMD", "pg_isready", "-q"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
   db:
