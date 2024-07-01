@@ -19,6 +19,7 @@ services:
     restart: always
     environment:
       - POSTGRES_PASSWORD
+      - PGUSER
     healthcheck:
       test: ["CMD", "pg_isready", "-q"]
       interval: 5s

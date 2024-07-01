@@ -37,8 +37,6 @@ pub async fn fetch_all(pool: web::Data<Pool<Postgres>>) -> impl Responder {
     let contexts_res: Result<Vec<ContextTaskCount>, sqlx::Error> =
         sqlx::query_as(request).fetch_all(pool.get_ref()).await;
 
-    println!("contexts_res: {:?}", contexts_res);
-
     match contexts_res {
         Ok(contexts) => HttpResponse::Ok().json(contexts),
         Err(_) => HttpResponse::InternalServerError().body("Internal Server Error"),
@@ -317,7 +315,6 @@ pub async fn delete(
 
     match deleted {
         Ok(ctx) => {
-            println!("ctx: {:?}", ctx);
             if ctx.active {
                 let cleaned = clean_active(&pool, ctx.id, false).await;
 
