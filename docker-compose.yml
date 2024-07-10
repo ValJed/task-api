@@ -7,6 +7,7 @@ services:
     environment:
       - DATABASE_URL
       - API_KEY    
+    restart: on-failure:3
     depends_on:
       db:
         condition: service_healthy
@@ -16,10 +17,10 @@ services:
       - "5432:5432"
     volumes:
       - db:/var/lib/postgresql/data
-    restart: always
+    restart: on-failure:3
     environment:
       - POSTGRES_PASSWORD
-      - PGUSER
+      - POSTGRES_USER 
       - PGDATA=/var/lib/postgresql/data
     healthcheck:
       test: ["CMD", "pg_isready", "-q"]
