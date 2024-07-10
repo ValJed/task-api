@@ -23,7 +23,7 @@ services:
       - POSTGRES_USER 
       - PGDATA=/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "pg_isready", "-q"]
+      test: ["CMD", "pg_isready", "-q" , '-U', '$POSTGRES_USER']
       interval: 5s
       timeout: 5s
       retries: 5
