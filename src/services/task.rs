@@ -80,7 +80,6 @@ pub async fn fetch(
             return HttpResponse::Ok().json(tasks);
         }
         Err(err) => {
-            println!("err: {:?}", err);
             return handle_err(err);
         }
     }
@@ -141,7 +140,6 @@ pub async fn create(
             .fetch_one(pool.get_ref())
             .await;
 
-    println!("tasks_res: {:?}", task_res);
     match task_res {
         Ok(task) => return HttpResponse::Ok().json(task),
         Err(err) => return handle_err(err),
@@ -190,9 +188,12 @@ pub async fn toggle_done(
     query: web::Query<IndexQuery>,
 ) -> impl Responder {
     let task_id = get_id_from_index(&pool, *id, query.index).await;
+    if task_id.is_none() {
+        return HttpResponse::NotFound().body("Task not found");
+    }
     let task: Result<Task, sqlx::Error> =
-        sqlx::query_as("UPDATE task SET done = NOT done WHERE id = $1")
-            .bind(task_id)
+        sqlx::query_as("UPDATE task SET done = NOT done WHERE id = $1 RETURNING *")
+            .bind(task_id.unwrap())
             .fetch_one(pool.get_ref())
             .await;
 
