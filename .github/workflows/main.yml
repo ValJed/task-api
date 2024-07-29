@@ -26,5 +26,5 @@ jobs:
           EXCLUDE: ".git, .gitignore, .dockerignore, .github"
           SCRIPT_AFTER: |
             cd /var/www/task-api
-            docker compose build task-api
+            docker compose build api
             docker compose up -d
