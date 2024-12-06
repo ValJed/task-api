@@ -185,11 +185,11 @@ pub async fn create_batch(
 #[put("/done/{id}")]
 pub async fn toggle_done(
     pool: web::Data<Pool<Postgres>>,
-    id: web::Path<i32>,
+    id: web::Path<String>,
     query: web::Query<IndexQuery>,
 ) -> impl Responder {
-    let task_id = get_id_from_index(&pool, *id, query.index).await;
-    if task_id.is_none() {
+    let task_ids = get_id_from_indexes(&pool, id, query.index).await;
+    if !task_id.len() {
         return HttpResponse::NotFound().body("Task not found");
     }
     let task: Result<Task, sqlx::Error> =
@@ -209,13 +209,13 @@ pub async fn update(
     pool: web::Data<Pool<Postgres>>,
     data: web::Json<TaskPutRequest>,
     query: web::Query<IndexQuery>,
-    id: web::Path<i32>,
+    id: web::Path<String>,
 ) -> impl Responder {
     if data.content.is_none() && data.done.is_none() {
         return HttpResponse::BadRequest().body("Content or done is required");
     }
 
-    let task_id = get_id_from_index(&pool, *id, query.index).await;
+    let task_id = get_id_from_indexes(&pool, id, query.index).await;
     if task_id.is_none() {
         return HttpResponse::NotFound().body("Task not found");
     }
@@ -262,11 +262,12 @@ pub async fn update(
 #[delete("/{id}")]
 pub async fn delete(
     pool: web::Data<Pool<Postgres>>,
-    id: web::Path<i32>,
+    id: web::Path<String>,
     query: web::Query<IndexQuery>,
 ) -> impl Responder {
-    let task_id = get_id_from_index(&pool, *id, query.index).await;
-    if task_id.is_none() {
+    println!("id: {:?}", id);
+    let task_ids = get_id_from_indexes(&pool, id.to_string(), query.index).await;
+    if task_ids.len() == 0 {
         return HttpResponse::NotFound().body("Task not found");
     }
 
@@ -303,13 +304,22 @@ pub async fn delete_all(pool: web::Data<Pool<Postgres>>) -> impl Responder {
     }
 }
 
-async fn get_id_from_index(
+async fn get_id_from_indexes(
     pool: &web::Data<Pool<Postgres>>,
-    index: i32,
+    indexes_ids: String,
     by_index: Option<bool>,
-) -> Option<i32> {
+) -> Vec<i32> {
+    let indexes: Vec<i32> = indexes_ids
+        .split(',')
+        .filter_map(|str| match str.parse() {
+            Ok(num) => Some(num),
+            Err(_) => None,
+        })
+        .collect();
+
+    println!("parsed_indexes: {:?}", indexes);
     if by_index.is_none() || !by_index.unwrap() {
-        return Some(index);
+        return indexes;
     }
     let request = r#"
         SELECT task.* 
@@ -320,11 +330,16 @@ async fn get_id_from_index(
     let tasks: Result<Vec<Task>, sqlx::Error> =
         sqlx::query_as(request).fetch_all(pool.get_ref()).await;
 
-    match tasks {
-        Ok(tasks) => match tasks.get(index as usize - 1).cloned() {
-            Some(task) => return Some(task.id),
-            None => return None,
-        },
-        Err(_) => None,
-    }
+    let ids = indexes
+        .iter()
+        .filter_map(|index| match &tasks {
+            Ok(tasks) => match tasks.get(*index as usize - 1).cloned() {
+                Some(task) => return Some(task.id),
+                None => return None,
+            },
+            Err(_) => None,
+        })
+        .collect();
+
+    ids
 }
