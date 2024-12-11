@@ -188,19 +188,32 @@ pub async fn toggle_done(
     id: web::Path<String>,
     query: web::Query<IndexQuery>,
 ) -> impl Responder {
-    let task_ids = get_id_from_indexes(&pool, id, query.index).await;
-    if !task_id.len() {
+    let task_ids = get_id_from_indexes(&pool, id.to_string(), query.index).await;
+    if task_ids.len() == 0 {
         return HttpResponse::NotFound().body("Task not found");
     }
-    let task: Result<Task, sqlx::Error> =
-        sqlx::query_as("UPDATE task SET done = NOT done WHERE id = $1 RETURNING *")
-            .bind(task_id.unwrap())
-            .fetch_one(pool.get_ref())
-            .await;
 
-    match task {
-        Ok(task) => HttpResponse::Ok().json(task),
-        Err(err) => handle_err(err),
+    let mut results: Vec<Task> = vec![];
+    let mut error: Option<sqlx::Error> = None;
+
+    for id in task_ids {
+        let res: Result<Task, sqlx::Error> = 
+            sqlx::query_as("UPDATE task SET done = NOT done WHERE id = $1 RETURNING *")
+                    .bind(&id)
+                    .fetch_one(pool.get_ref())
+                    .await;
+        match res {
+            Ok(task) => results.push(task),
+            Err(err) => {
+                error = Some(err);
+                break;
+            }
+        }
+    }
+
+    match error {
+        None => HttpResponse::Ok().json(results),
+        Some(err) =>  handle_err(err)
     }
 }
 
@@ -215,10 +228,14 @@ pub async fn update(
         return HttpResponse::BadRequest().body("Content or done is required");
     }
 
-    let task_id = get_id_from_indexes(&pool, id, query.index).await;
-    if task_id.is_none() {
+    let task_ids = get_id_from_indexes(&pool, id.to_string(), query.index).await;
+    if task_ids.len() == 0 {
         return HttpResponse::NotFound().body("Task not found");
     }
+    if task_ids.len() > 1 {
+        return HttpResponse::BadRequest().body("Only one ID allowed for update");
+    }
+    let task_id = task_ids[0];
 
     let set_content = if data.content.is_some() {
         let content = data.content.clone().unwrap();
@@ -265,23 +282,33 @@ pub async fn delete(
     id: web::Path<String>,
     query: web::Query<IndexQuery>,
 ) -> impl Responder {
-    println!("id: {:?}", id);
     let task_ids = get_id_from_indexes(&pool, id.to_string(), query.index).await;
     if task_ids.len() == 0 {
         return HttpResponse::NotFound().body("Task not found");
     }
 
-    let deleted: Result<Task, sqlx::Error> =
-        sqlx::query_as("DELETE from task WHERE id = $1 RETURNING *")
-            .bind(task_id.unwrap())
-            .fetch_one(pool.get_ref())
-            .await;
+    let mut results: Vec<Task> = vec![];
+    let mut error: Option<sqlx::Error> = None;
+    for id in task_ids {
+        
+        let res: Result<Task, sqlx::Error> =
+            sqlx::query_as("DELETE from task WHERE id = $1 RETURNING *")
+                .bind(&id)
+                .fetch_one(pool.get_ref())
+                .await;
 
-    match deleted {
-        Ok(task) => {
-            return HttpResponse::Ok().json(task);
+        match res {
+            Ok(task) => results.push(task),
+            Err(err) => {
+                error = Some(err);
+                break;
+            }
         }
-        Err(err) => return handle_err(err),
+    }
+
+    match error {
+        None => HttpResponse::Ok().json(results),
+        Some(err) =>  handle_err(err)
     }
 }
 
@@ -317,7 +344,6 @@ async fn get_id_from_indexes(
         })
         .collect();
 
-    println!("parsed_indexes: {:?}", indexes);
     if by_index.is_none() || !by_index.unwrap() {
         return indexes;
     }
