@@ -1,6 +1,7 @@
+#[path = "../sql.rs"]
+mod sql;
 #[path = "../structs.rs"]
 mod structs;
-
 #[path = "../utils.rs"]
 mod utils;
 
@@ -113,28 +114,9 @@ pub async fn use_or_create(
         }
     }
 
-    let request = r#"
-        SELECT 
-        context.id,
-        context.name,
-        context.active,
-        COALESCE(json_agg(
-            json_build_object(
-                'id', task.id, 
-                'content', task.content, 
-                'done', task.done, 
-                'creation_date', task.creation_date, 
-                'modification_date', task.modification_date)
-            ) FILTER (WHERE task.id IS NOT NULL), '[]') AS tasks
-        FROM context
-        LEFT JOIN task
-        ON task.context_id = context.id
-        WHERE context.active = true
-        GROUP BY context.id
-        "#;
-
-    let filled_ctx: Result<FullContext, sqlx::Error> =
-        sqlx::query_as(request).fetch_one(pool.get_ref()).await;
+    let filled_ctx: Result<FullContext, sqlx::Error> = sqlx::query_as(&sql::LIST_TASKS_ACTIVE)
+        .fetch_one(pool.get_ref())
+        .await;
 
     match filled_ctx {
         Ok(ctx) => return HttpResponse::Ok().json(ctx),

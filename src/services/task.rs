@@ -1,6 +1,7 @@
+#[path = "../sql.rs"]
+mod sql;
 #[path = "../structs.rs"]
 mod structs;
-
 #[path = "../utils.rs"]
 mod utils;
 
@@ -44,36 +45,13 @@ pub async fn fetch(
     }
 
     let active = query.active.unwrap_or(false);
-    let partial_req = match active {
-        true => "WHERE context.active = true",
-        false => "",
+    let request = match active {
+        true => &sql::LIST_TASKS_ACTIVE,
+        false => &sql::LIST_TASKS,
     };
-    let request = format!(
-        r#"
-        SELECT 
-          context.id,
-          context.name,
-          context.active,
-          COALESCE(json_agg(
-            json_build_object(
-                'id', task.id, 
-                'content', task.content, 
-                'done', task.done, 
-                'creation_date', task.creation_date, 
-                'modification_date', task.modification_date) ORDER BY task.id ASC
-            ) FILTER (WHERE task.id IS NOT NULL), '[]') AS tasks         
-        FROM context
-        LEFT JOIN task
-        ON task.context_id = context.id
-        {}
-        GROUP BY context.id
-        ORDER BY context.id ASC;
-        "#,
-        partial_req
-    );
 
     let tasks_res: Result<Vec<FullContext>, sqlx::Error> =
-        sqlx::query_as(&request).fetch_all(pool.get_ref()).await;
+        sqlx::query_as(request).fetch_all(pool.get_ref()).await;
 
     match tasks_res {
         Ok(tasks) => {
@@ -197,11 +175,11 @@ pub async fn toggle_done(
     let mut error: Option<sqlx::Error> = None;
 
     for id in task_ids {
-        let res: Result<Task, sqlx::Error> = 
+        let res: Result<Task, sqlx::Error> =
             sqlx::query_as("UPDATE task SET done = NOT done WHERE id = $1 RETURNING *")
-                    .bind(&id)
-                    .fetch_one(pool.get_ref())
-                    .await;
+                .bind(&id)
+                .fetch_one(pool.get_ref())
+                .await;
         match res {
             Ok(task) => results.push(task),
             Err(err) => {
@@ -213,7 +191,7 @@ pub async fn toggle_done(
 
     match error {
         None => HttpResponse::Ok().json(results),
-        Some(err) =>  handle_err(err)
+        Some(err) => handle_err(err),
     }
 }
 
@@ -290,7 +268,6 @@ pub async fn delete(
     let mut results: Vec<Task> = vec![];
     let mut error: Option<sqlx::Error> = None;
     for id in task_ids {
-        
         let res: Result<Task, sqlx::Error> =
             sqlx::query_as("DELETE from task WHERE id = $1 RETURNING *")
                 .bind(&id)
@@ -308,7 +285,7 @@ pub async fn delete(
 
     match error {
         None => HttpResponse::Ok().json(results),
-        Some(err) =>  handle_err(err)
+        Some(err) => handle_err(err),
     }
 }
 
