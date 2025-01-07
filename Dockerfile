@@ -1,4 +1,4 @@
-FROM rust:1.77 as builder
+FROM rust:1.83 as builder
 WORKDIR /usr/src/task-api
 COPY . .
 RUN cargo install --path .
