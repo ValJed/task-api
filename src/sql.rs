@@ -9,7 +9,7 @@ pub const LIST_TASKS_ACTIVE: &str = r#"
                 'content', task.content, 
                 'done', task.done, 
                 'creation_date', task.creation_date, 
-                'modification_date', task.modification_date)
+                'modification_date', task.modification_date) ORDER BY task.id ASC
             ) FILTER (WHERE task.id IS NOT NULL), '[]') AS tasks
         FROM context
         LEFT JOIN task
@@ -31,6 +31,7 @@ pub const LIST_TASKS: &str = r#"
                 'done', task.done, 
                 'creation_date', task.creation_date, 
                 'modification_date', task.modification_date)
+                'modification_date', task.modification_date) ORDER BY task.id ASC
             ) FILTER (WHERE task.id IS NOT NULL), '[]') AS tasks
         FROM context
         LEFT JOIN task
