@@ -1,0 +1,33 @@
+# For basic usage info, see:
+# https://slumber.lucaspickering.me/book/getting_started.html
+# For all collection options, see:
+# https://slumber.lucaspickering.me/book/api/request_collection/index.html
+
+# Profiles are groups of data you can easily switch between. A common usage is
+# to define profiles for various environments of a REST service
+profiles:
+  example:
+    name: Example Profile
+    data:
+      host: http://localhost:3000
+
+# Chains allow you to use dynamic data in your request templates
+chains:
+  token:
+    source: !env
+      variable: API_KEY
+    sensitive: false
+
+requests:
+  tasks: !request
+    name: Get Experiences
+    method: GET
+    url: "{{host}}/task"
+    authentication: !bearer "{{chains.token}}"
+  contexts: !request
+    name: Get Contexts
+    method: GET
+    url: "{{host}}/context"
+    authentication: !bearer "{{chains.token}}"
+
+

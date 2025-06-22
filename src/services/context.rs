@@ -6,7 +6,7 @@ mod structs;
 mod utils;
 
 use actix_web::{delete, get, post, put, web, HttpResponse, Responder, Result, Scope};
-use sqlx::{Pool, Postgres};
+use sqlx::{Pool, Sqlite};
 use structs::{
     Context, ContextName, ContextRequest, ContextTaskCount, FullContext, FullContextTask,
     IndexQuery,
@@ -25,7 +25,7 @@ pub fn get_scope() -> Scope {
 }
 
 #[get("")]
-pub async fn fetch_all(pool: web::Data<Pool<Postgres>>) -> impl Responder {
+pub async fn fetch_all(pool: web::Data<Pool<Sqlite>>) -> impl Responder {
     let request = r#"
         SELECT context.*, COUNT(task.id) AS task_count 
         FROM context 
@@ -46,7 +46,7 @@ pub async fn fetch_all(pool: web::Data<Pool<Postgres>>) -> impl Responder {
 
 #[post("")]
 pub async fn use_or_create(
-    pool: web::Data<Pool<Postgres>>,
+    pool: web::Data<Pool<Sqlite>>,
     data: web::Json<ContextRequest>,
 ) -> impl Responder {
     if data.name.is_empty() {
@@ -125,7 +125,7 @@ pub async fn use_or_create(
 }
 
 #[post("/clear")]
-pub async fn clear_active(pool: web::Data<Pool<Postgres>>) -> impl Responder {
+pub async fn clear_active(pool: web::Data<Pool<Sqlite>>) -> impl Responder {
     let active_ctx: Result<Context, sqlx::Error> =
         sqlx::query_as("SELECT * FROM context WHERE active = true")
             .fetch_one(pool.get_ref())
@@ -149,7 +149,7 @@ pub async fn clear_active(pool: web::Data<Pool<Postgres>>) -> impl Responder {
 
 // Not used right now
 #[post("/clear/{id}")]
-pub async fn clear(pool: web::Data<Pool<Postgres>>, id: web::Path<i32>) -> impl Responder {
+pub async fn clear(pool: web::Data<Pool<Sqlite>>, id: web::Path<i32>) -> impl Responder {
     let deleted_tasks = sqlx::query("DELETE FROM task WHERE context_id = $1")
         .bind(*id)
         .execute(pool.get_ref())
@@ -164,7 +164,7 @@ pub async fn clear(pool: web::Data<Pool<Postgres>>, id: web::Path<i32>) -> impl 
 
 #[put("/index/{index}")]
 pub async fn update_by_index(
-    pool: web::Data<Pool<Postgres>>,
+    pool: web::Data<Pool<Sqlite>>,
     data: web::Json<ContextName>,
     index: web::Path<i32>,
 ) -> impl Responder {
@@ -191,7 +191,7 @@ pub async fn update_by_index(
 
 #[put("/{id}")]
 pub async fn update(
-    pool: web::Data<Pool<Postgres>>,
+    pool: web::Data<Pool<Sqlite>>,
     data: web::Json<Context>,
     id: web::Path<i32>,
 ) -> impl Responder {
@@ -230,7 +230,7 @@ pub async fn update(
 }
 
 async fn clean_active(
-    pool: &web::Data<Pool<Postgres>>,
+    pool: &web::Data<Pool<Sqlite>>,
     id: i32,
     active: bool,
 ) -> Result<(), sqlx::Error> {
@@ -273,7 +273,7 @@ async fn clean_active(
 
 #[delete("/{id}")]
 pub async fn delete(
-    pool: web::Data<Pool<Postgres>>,
+    pool: web::Data<Pool<Sqlite>>,
     id: web::Path<i32>,
     query: web::Query<IndexQuery>,
 ) -> impl Responder {
@@ -319,7 +319,7 @@ pub async fn delete(
 }
 
 #[delete("")]
-pub async fn delete_all(pool: web::Data<Pool<Postgres>>) -> impl Responder {
+pub async fn delete_all(pool: web::Data<Pool<Sqlite>>) -> impl Responder {
     let deleted: Result<(), sqlx::Error> = sqlx::query_as("DELETE from context")
         .fetch_one(pool.get_ref())
         .await;
@@ -338,7 +338,7 @@ pub async fn delete_all(pool: web::Data<Pool<Postgres>>) -> impl Responder {
 }
 
 async fn get_context_by_index(
-    pool: &web::Data<Pool<Postgres>>,
+    pool: &web::Data<Pool<Sqlite>>,
     index: i32,
     by_index: bool,
 ) -> Option<i32> {

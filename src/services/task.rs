@@ -7,7 +7,7 @@ mod utils;
 
 use actix_web::{delete, get, post, put, web, HttpResponse, Responder, Scope};
 use chrono::Local;
-use sqlx::{Pool, Postgres};
+use sqlx::{Pool, Sqlite};
 use structs::{
     Context, FullContext, IndexQuery, Task, TaskGetRequest, TaskPutRequest, TaskRequest,
 };
@@ -27,7 +27,7 @@ pub fn get_scope() -> Scope {
 
 #[get("")]
 pub async fn fetch(
-    pool: web::Data<Pool<Postgres>>,
+    pool: web::Data<Pool<Sqlite>>,
     query: web::Query<TaskGetRequest>,
 ) -> impl Responder {
     if query.context_id.is_some() {
@@ -65,7 +65,7 @@ pub async fn fetch(
 }
 
 #[get("/{id}")]
-pub async fn fetch_one(pool: web::Data<Pool<Postgres>>, id: web::Path<i32>) -> impl Responder {
+pub async fn fetch_one(pool: web::Data<Pool<Sqlite>>, id: web::Path<i32>) -> impl Responder {
     let task_res: Result<Task, sqlx::Error> = sqlx::query_as("SELECT * FROM task WHERE id = $1")
         .bind(*id)
         .fetch_one(pool.get_ref())
@@ -79,10 +79,7 @@ pub async fn fetch_one(pool: web::Data<Pool<Postgres>>, id: web::Path<i32>) -> i
 
 // TODO: Verify context exist when creating from context ID
 #[post("")]
-pub async fn create(
-    pool: web::Data<Pool<Postgres>>,
-    data: web::Json<TaskRequest>,
-) -> impl Responder {
+pub async fn create(pool: web::Data<Pool<Sqlite>>, data: web::Json<TaskRequest>) -> impl Responder {
     if data.content.is_empty() {
         return HttpResponse::BadRequest().body("Name is required");
     }
@@ -127,7 +124,7 @@ pub async fn create(
 
 #[post("/batch")]
 pub async fn create_batch(
-    pool: web::Data<Pool<Postgres>>,
+    pool: web::Data<Pool<Sqlite>>,
     data: web::Json<Vec<TaskRequest>>,
 ) -> impl Responder {
     let date = Local::now().to_string();
@@ -162,7 +159,7 @@ pub async fn create_batch(
 
 #[put("/done/{id}")]
 pub async fn toggle_done(
-    pool: web::Data<Pool<Postgres>>,
+    pool: web::Data<Pool<Sqlite>>,
     id: web::Path<String>,
     query: web::Query<IndexQuery>,
 ) -> impl Responder {
@@ -197,7 +194,7 @@ pub async fn toggle_done(
 
 #[put("/{id}")]
 pub async fn update(
-    pool: web::Data<Pool<Postgres>>,
+    pool: web::Data<Pool<Sqlite>>,
     data: web::Json<TaskPutRequest>,
     query: web::Query<IndexQuery>,
     id: web::Path<String>,
@@ -256,7 +253,7 @@ pub async fn update(
 
 #[delete("/{id}")]
 pub async fn delete(
-    pool: web::Data<Pool<Postgres>>,
+    pool: web::Data<Pool<Sqlite>>,
     id: web::Path<String>,
     query: web::Query<IndexQuery>,
 ) -> impl Responder {
@@ -290,7 +287,7 @@ pub async fn delete(
 }
 
 #[delete("")]
-pub async fn delete_all(pool: web::Data<Pool<Postgres>>) -> impl Responder {
+pub async fn delete_all(pool: web::Data<Pool<Sqlite>>) -> impl Responder {
     let deleted: Result<(), sqlx::Error> = sqlx::query_as("DELETE from task")
         .fetch_one(pool.get_ref())
         .await;
@@ -309,7 +306,7 @@ pub async fn delete_all(pool: web::Data<Pool<Postgres>>) -> impl Responder {
 }
 
 async fn get_id_from_indexes(
-    pool: &web::Data<Pool<Postgres>>,
+    pool: &web::Data<Pool<Sqlite>>,
     indexes_ids: String,
     by_index: Option<bool>,
 ) -> Vec<i32> {
