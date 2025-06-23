@@ -19,15 +19,32 @@ chains:
     sensitive: false
 
 requests:
-  tasks: !request
-    name: Get Experiences
+  get_tasks: !request
+    name: Get Tasks
     method: GET
     url: "{{host}}/task"
-    authentication: !bearer "{{chains.token}}"
-  contexts: !request
+    headers:
+      Accept: application/json
+      authorization: "{{chains.token}}"
+  get_task_active: !request
+    name: Get Task Active
+    method: GET
+    url: "{{host}}/task?active=true"
+    headers:
+      Accept: application/json
+      authorization: "{{chains.token}}"
+  get_contexts: !request
     name: Get Contexts
     method: GET
     url: "{{host}}/context"
-    authentication: !bearer "{{chains.token}}"
-
+    headers:
+      Accept: application/json
+      authorization: "{{chains.token}}"
+  post_context: !request
+    name: Post Context
+    method: POST
+    url: "{{host}}/context"
+    headers:
+      Accept: application/json
+      authorization: "{{chains.token}}"
 
