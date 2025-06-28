@@ -3,9 +3,8 @@ use std::path::Path;
 
 pub async fn connect_db() -> Pool<Sqlite> {
     let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-
     let db_path = db_url
-        .strip_prefix("sqlite:")
+        .strip_prefix("sqlite://")
         .expect("DATABASE_URL must start with 'sqlite://'");
 
     // Ensure the parent directory exists
