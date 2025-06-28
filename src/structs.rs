@@ -49,6 +49,16 @@ pub struct Task {
     modification_date: String,
 }
 
+
+#[derive(Serialize, Deserialize, FromRow, Debug, Clone)]
+pub struct TaskDb {
+    pub id: i32,
+    content: String,
+    done: i32,
+    creation_date: String,
+    modification_date: String,
+}
+
 #[derive(Deserialize, Debug, Clone)]
 pub struct TaskRequest {
     pub content: String,
@@ -89,3 +99,14 @@ pub struct FullContext {
     pub active: bool,
     pub tasks: Json<Vec<Task>>,
 }
+
+impl From<TaskDb> for Task {
+    fn from(db: TaskDb) -> Self {
+        Task {
+            id: db.id,
+            content: db.content,
+            done: db.done != 0,
+            active: db.active != 0,
+            context_id: db.context_id,
+        }
+    }
