@@ -9,7 +9,8 @@ use actix_web::{delete, get, post, put, web, HttpResponse, Responder, Scope};
 use chrono::Local;
 use sqlx::{Pool, Sqlite};
 use structs::{
-    Context, FullContext, IndexQuery, Task, TaskGetRequest, TaskPutRequest, TaskRequest,
+    ContextDb, FullContext, FullContextDb, IndexQuery, Task, TaskDb, TaskGetRequest,
+    TaskPutRequest, TaskRequest,
 };
 use utils::handle_err;
 
@@ -32,14 +33,17 @@ pub async fn fetch(
 ) -> impl Responder {
     if query.context_id.is_some() {
         let context_id = query.context_id.unwrap();
-        let tasks_res: Result<Vec<Task>, sqlx::Error> =
+        let tasks_res: Result<Vec<TaskDb>, sqlx::Error> =
             sqlx::query_as("SELECT * FROM task WHERE context_id = $1 ORDER BY id ASC")
                 .bind(context_id)
                 .fetch_all(pool.get_ref())
                 .await;
 
         match tasks_res {
-            Ok(tasks) => return HttpResponse::Ok().json(tasks),
+            Ok(tasks) => {
+                let tasks: Vec<Task> = tasks.into_iter().map(|task| Task::from(task)).collect();
+                return HttpResponse::Ok().json(tasks);
+            }
             Err(err) => return handle_err(err),
         }
     }
@@ -50,12 +54,16 @@ pub async fn fetch(
         false => &sql::LIST_TASKS,
     };
 
-    let tasks_res: Result<Vec<FullContext>, sqlx::Error> =
+    let tasks_res: Result<Vec<FullContextDb>, sqlx::Error> =
         sqlx::query_as(request).fetch_all(pool.get_ref()).await;
 
     match tasks_res {
-        Ok(tasks) => {
-            // TODO: Test response when no active context
+        Ok(tasks_db) => {
+            let tasks: Vec<FullContext> = tasks_db
+                .into_iter()
+                .map(|task| FullContext::from(task))
+                .collect();
+
             return HttpResponse::Ok().json(tasks);
         }
         Err(err) => {
@@ -85,11 +93,10 @@ pub async fn create(pool: web::Data<Pool<Sqlite>>, data: web::Json<TaskRequest>)
     }
 
     let context_id: i32;
-
     if data.context_id.is_some() {
         context_id = data.context_id.unwrap();
     } else {
-        let active_context: Result<Option<Context>, sqlx::Error> =
+        let active_context: Result<Option<ContextDb>, sqlx::Error> =
             sqlx::query_as("SELECT * from context WHERE context.active = true")
                 .fetch_optional(pool.get_ref())
                 .await;
@@ -327,7 +334,7 @@ async fn get_id_from_indexes(
         INNER JOIN task ON task.context_id = context.id 
         WHERE context.active = true ORDER BY task.id ASC;
     "#;
-    let tasks: Result<Vec<Task>, sqlx::Error> =
+    let tasks: Result<Vec<TaskDb>, sqlx::Error> =
         sqlx::query_as(request).fetch_all(pool.get_ref()).await;
 
     let ids = indexes

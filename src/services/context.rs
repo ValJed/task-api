@@ -8,7 +8,7 @@ mod utils;
 use actix_web::{delete, get, post, put, web, HttpResponse, Responder, Result, Scope};
 use sqlx::{Pool, Sqlite};
 use structs::{
-    Context, ContextName, ContextRequest, ContextTaskCount, FullContext, FullContextTask,
+    Context, ContextDb, ContextName, ContextRequest, ContextTaskCount, FullContext, FullContextDb,
     IndexQuery,
 };
 use utils::handle_err;
@@ -102,7 +102,7 @@ pub async fn use_or_create(
 
         match context {
             Ok(ctx) => {
-                let filled = FullContextTask {
+                let filled = FullContext {
                     id: ctx.id,
                     name: ctx.name,
                     active: ctx.active,
@@ -114,12 +114,12 @@ pub async fn use_or_create(
         }
     }
 
-    let filled_ctx: Result<FullContext, sqlx::Error> = sqlx::query_as(&sql::LIST_TASKS_ACTIVE)
+    let filled_ctx: Result<FullContextDb, sqlx::Error> = sqlx::query_as(&sql::LIST_TASKS_ACTIVE)
         .fetch_one(pool.get_ref())
         .await;
 
     match filled_ctx {
-        Ok(ctx) => return HttpResponse::Ok().json(ctx),
+        Ok(ctx) => return HttpResponse::Ok().json(FullContext::from(ctx)),
         Err(err) => return handle_err(err),
     }
 }
@@ -215,7 +215,7 @@ pub async fn update(
         }
     }
 
-    let updated: Result<Context, sqlx::Error> =
+    let updated: Result<ContextDb, sqlx::Error> =
         sqlx::query_as("UPDATE context SET name = $1, active = $2 WHERE id = $3 RETURNING *")
             .bind(data.name.clone())
             .bind(data.active)
@@ -224,7 +224,7 @@ pub async fn update(
             .await;
 
     match updated {
-        Ok(ctx) => HttpResponse::Ok().json(ctx),
+        Ok(ctx) => HttpResponse::Ok().json(Context::from(ctx)),
         Err(err) => handle_err(err),
     }
 }
@@ -248,7 +248,7 @@ async fn clean_active(
         return Ok(());
     }
 
-    let new_active: Result<Context, sqlx::Error> = sqlx::query_as(
+    let new_active: Result<ContextDb, sqlx::Error> = sqlx::query_as(
         "SELECT * FROM context WHERE active = false AND NOT id = $1 ORDER BY id LIMIT 1",
     )
     .bind(id)
@@ -289,17 +289,17 @@ pub async fn delete(
         return HttpResponse::InternalServerError().body("Internal Server Error");
     }
 
-    let deleted: Result<Context, sqlx::Error> =
+    let deleted: Result<ContextDb, sqlx::Error> =
         sqlx::query_as("DELETE FROM context WHERE id = $1 RETURNING * ")
             .bind(ctx_id)
             .fetch_one(pool.get_ref())
             .await;
 
     match deleted {
-        Ok(ctx) => {
+        Ok(context_db) => {
+            let ctx = Context::from(context_db);
             if ctx.active {
                 let cleaned = clean_active(&pool, ctx.id, false).await;
-
                 if cleaned.is_err() {
                     return HttpResponse::InternalServerError().body("Internal Server Error");
                 }
@@ -351,7 +351,7 @@ async fn get_context_by_index(
         FROM context 
         ORDER BY context.id ASC;
     "#;
-    let contexts: Result<Vec<Context>, sqlx::Error> =
+    let contexts: Result<Vec<ContextDb>, sqlx::Error> =
         sqlx::query_as(request).fetch_all(pool.get_ref()).await;
 
     match contexts {

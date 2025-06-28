@@ -9,10 +9,27 @@ pub struct AppState {
 }
 
 #[derive(Serialize, Deserialize, FromRow, Debug, Clone)]
+pub struct ContextDb {
+    pub id: i32,
+    pub name: String,
+    pub active: i32,
+}
+
+#[derive(Serialize, Deserialize, FromRow, Debug, Clone)]
 pub struct Context {
     pub id: i32,
     pub name: String,
     pub active: bool,
+}
+
+impl From<ContextDb> for Context {
+    fn from(raw: ContextDb) -> Self {
+        Context {
+            id: raw.id,
+            name: raw.name,
+            active: raw.active != 0,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, FromRow, Debug)]
@@ -41,6 +58,15 @@ pub struct GetContextQuery {
 }
 
 #[derive(Serialize, Deserialize, FromRow, Debug, Clone)]
+pub struct TaskDb {
+    pub id: i32,
+    content: String,
+    done: i32,
+    creation_date: String,
+    modification_date: String,
+}
+
+#[derive(Serialize, Deserialize, FromRow, Debug, Clone)]
 pub struct Task {
     pub id: i32,
     content: String,
@@ -49,14 +75,16 @@ pub struct Task {
     modification_date: String,
 }
 
-
-#[derive(Serialize, Deserialize, FromRow, Debug, Clone)]
-pub struct TaskDb {
-    pub id: i32,
-    content: String,
-    done: i32,
-    creation_date: String,
-    modification_date: String,
+impl From<TaskDb> for Task {
+    fn from(raw: TaskDb) -> Self {
+        Task {
+            id: raw.id,
+            content: raw.content,
+            done: raw.done != 0,
+            creation_date: raw.creation_date,
+            modification_date: raw.modification_date,
+        }
+    }
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -85,7 +113,7 @@ pub struct IndexQuery {
 }
 
 #[derive(Serialize, Debug)]
-pub struct FullContextTask {
+pub struct FullContext {
     pub id: i32,
     pub name: String,
     pub active: bool,
@@ -93,20 +121,20 @@ pub struct FullContextTask {
 }
 
 #[derive(Serialize, Deserialize, FromRow, Debug)]
-pub struct FullContext {
+pub struct FullContextDb {
     pub id: i32,
     pub name: String,
-    pub active: bool,
-    pub tasks: Json<Vec<Task>>,
+    pub active: i32,
+    pub tasks: Json<Vec<TaskDb>>,
 }
 
-impl From<TaskDb> for Task {
-    fn from(db: TaskDb) -> Self {
-        Task {
-            id: db.id,
-            content: db.content,
-            done: db.done != 0,
-            active: db.active != 0,
-            context_id: db.context_id,
+impl From<FullContextDb> for FullContext {
+    fn from(raw: FullContextDb) -> Self {
+        FullContext {
+            id: raw.id,
+            name: raw.name,
+            active: raw.active != 0,
+            tasks: raw.tasks.0.into_iter().map(Task::from).collect(),
         }
     }
+}

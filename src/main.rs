@@ -43,7 +43,6 @@ async fn authorize(
     let api_key = std::env::var("API_KEY").expect("API_KEY must be set");
     let token = req.headers().get("AUTHORIZATION");
 
-    println!("token: {:?}", token);
     if token.is_none() || *token.unwrap() != api_key {
         return Err(actix_web::error::ErrorUnauthorized("Not authorized"));
     }
