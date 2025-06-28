@@ -10,7 +10,8 @@ pub const LIST_TASKS_ACTIVE: &str = r#"
                     'content', task.content,
                     'done', task.done,
                     'creation_date', task.creation_date,
-                    'modification_date', task.modification_date
+                    'modification_date', task.modification_date,
+                    'due_date', task.due_date
                 )
             ) FILTER (WHERE task.id IS NOT NULL), json_array()) AS tasks
         FROM context
@@ -32,7 +33,8 @@ pub const LIST_TASKS: &str = r#"
                     'content', task.content,
                     'done', task.done,
                     'creation_date', task.creation_date,
-                    'modification_date', task.modification_date
+                    'modification_date', task.modification_date,
+                    'due_date', task.due_date
                 )
             ) FILTER (WHERE task.id IS NOT NULL), json_array()) AS tasks
         FROM context
