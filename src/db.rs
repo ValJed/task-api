@@ -31,12 +31,6 @@ pub async fn connect_db() -> Pool<Sqlite> {
         Err(e) => panic!("Error connecting to the database: {}", e),
     };
 
-    // let pool = PgPoolOptions::new()
-    //     .max_connections(5)
-    //     .connect(&url)
-    //     .await
-    //     .expect("Error connecting to the database");
-
     pool
 }
 

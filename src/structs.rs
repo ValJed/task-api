@@ -1,12 +1,6 @@
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::types::Json;
-use sqlx::{FromRow, Pool, Postgres};
-
-#[derive(Debug)]
-pub struct AppState {
-    pub db: Pool<Postgres>,
-}
+use sqlx::FromRow;
 
 #[derive(Serialize, Deserialize, FromRow, Debug, Clone)]
 pub struct ContextDb {
@@ -50,11 +44,6 @@ pub struct ContextRequest {
     pub name: String,
     pub active: Option<bool>,
     pub simple_create: Option<bool>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct GetContextQuery {
-    pub count: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, FromRow, Debug, Clone)]
